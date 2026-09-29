@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 @MainActor
 final class FuelDataService: ObservableObject {
@@ -20,7 +21,6 @@ final class FuelDataService: ObservableObject {
     }
     private struct QldPackageResponse: Decodable { struct Result: Decodable { struct Resource: Decodable { let url: String? }; let resources: [Resource] }; let result: Result }
     private static func parseCSV(_ csv: String) -> [FuelStation] {
-        // Open Data resource schemas vary; only accept rows with recognizable station/name, address, coordinates and price columns.
         let rows = csv.components(separatedBy: .newlines).filter { !$0.isEmpty }
         guard let header = rows.first?.lowercased().components(separatedBy: ",") else { return [] }
         func index(_ candidates: [String]) -> Int? { header.firstIndex { h in candidates.contains(where: h.contains) } }
