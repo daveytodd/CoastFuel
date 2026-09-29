@@ -1,0 +1,21 @@
+name: CoastFuel
+options:
+  bundleIdPrefix: com.daveytodd
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  CoastFuel:
+    type: application
+    platform: iOS
+    sources:
+      - path: CoastFuel
+    info:
+      path: CoastFuel/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.daveytodd.CoastFuel
+        INFOPLIST_KEY_CFBundleDisplayName: CoastFuel
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
