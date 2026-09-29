@@ -10,7 +10,7 @@
 		A10000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* ContentView.swift */; };
 		A10000000000000000000003 /* FuelDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* FuelDataService.swift */; };
 		A10000000000000000000004 /* CarPlaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* CarPlaySceneDelegate.swift */; };
-		A10000000000000000000005 /* Models in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* Models */; };
+		A10000000000000000000006 /* FuelStation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* FuelStation.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -19,13 +19,13 @@
 		A20000000000000000000003 /* FuelDataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FuelDataService.swift; sourceTree = "<group>"; };
 		A20000000000000000000004 /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
 		A20000000000000000000005 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		A20000000000000000000006 /* Models */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Models; sourceTree = "<group>"; };
 		A20000000000000000000007 /* CoastFuel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CoastFuel.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000008 /* FuelStation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/FuelStation.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
 		A30000000000000000000001 = {isa = PBXGroup; children = (A30000000000000000000002 /* CoastFuel */, A30000000000000000000003 /* Products */, ); sourceTree = "<group>"; };
-		A30000000000000000000002 /* CoastFuel */ = {isa = PBXGroup; children = (A20000000000000000000001, A20000000000000000000002, A20000000000000000000003, A20000000000000000000004, A20000000000000000000005, A20000000000000000000006, ); path = CoastFuel; sourceTree = "<group>"; };
+		A30000000000000000000002 /* CoastFuel */ = {isa = PBXGroup; children = (A20000000000000000000001, A20000000000000000000002, A20000000000000000000003, A20000000000000000000004, A20000000000000000000005, A20000000000000000000008 /* FuelStation.swift */, ); path = CoastFuel; sourceTree = "<group>"; };
 		A30000000000000000000003 /* Products */ = {isa = PBXGroup; children = (A20000000000000000000007 /* CoastFuel.app */, ); name = Products; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
@@ -42,7 +42,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		A60000000000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001, A10000000000000000000002, A10000000000000000000003, A10000000000000000000004, A10000000000000000000005, ); runOnlyForDeploymentPostprocessing = 0; };
+		A60000000000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001, A10000000000000000000002, A10000000000000000000003, A10000000000000000000004, A10000000000000000000006, ); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -50,7 +50,7 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		A70000000000000000000001 /* Debug project */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; }; name = Debug; };
+		A70000000000000000000001 /* Debug project */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; CLANG_ENABLE_OBJC_MODULES = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; }; name = Debug; };
 		A70000000000000000000002 /* Release project */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; }; name = Release; };
 		A70000000000000000000003 /* Debug target */ = {isa = XCBuildConfiguration; buildSettings = {GENERATE_INFOPLIST_FILE = YES; INFOPLIST_FILE = CoastFuel/Info.plist; INFOPLIST_KEY_CFBundleDisplayName = CoastFuel; INFOPLIST_KEY_UILaunchScreen_Generation = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.daveytodd.CoastFuel; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Debug; };
 		A70000000000000000000004 /* Release target */ = {isa = XCBuildConfiguration; buildSettings = {GENERATE_INFOPLIST_FILE = YES; INFOPLIST_FILE = CoastFuel/Info.plist; INFOPLIST_KEY_CFBundleDisplayName = CoastFuel; INFOPLIST_KEY_UILaunchScreen_Generation = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.daveytodd.CoastFuel; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Release; };
