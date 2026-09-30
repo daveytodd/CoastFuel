@@ -15,7 +15,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     private func showList(_ stations: [FuelStation], on controller: CPInterfaceController) {
         let selected = UserDefaults.standard.string(forKey: "stationRadius") ?? "tenKm"
         let limit: Double? = switch selected { case "fiveKm": 5; case "tenKm": 10; case "twentyFiveKm": 25; case "fiftyKm": 50; default: nil }
-        let nearby = stations.filter { limit.map { $0 >= $0 } ?? true }
+        let nearby = stations.filter { station in limit.map { station.distanceKm <= $0 } ?? true }
         let items = nearby.sorted { ($0.prices[.unleaded91] ?? .infinity) < ($1.prices[.unleaded91] ?? .infinity) }.map { station -> CPListItem in
             let distance = String(format: "%.1f", station.distanceKm)
             let price = station.prices[.unleaded91].map { String(format: "%.1f¢/L", $0) } ?? "—"

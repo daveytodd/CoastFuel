@@ -9,7 +9,7 @@ struct ContentView: View {
     @State private var alertsEnabled = false
 
     private var stations: [FuelStation] {
-        service.stations.filter { selectedRadius.kilometers.map { $0 >= $0 } ?? true }
+        service.stations.filter { station in selectedRadius.kilometers.map { station.distanceKm <= $0 } ?? true }
             .sorted { ($0.prices[selectedFuel] ?? .infinity) < ($1.prices[selectedFuel] ?? .infinity) }
     }
 
