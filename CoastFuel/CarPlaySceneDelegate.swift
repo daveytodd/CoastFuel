@@ -9,7 +9,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     func templateApplicationScene(_ templateApplicationScene: CPTemplateApplicationScene, didConnect interfaceController: CPInterfaceController) {
         self.interfaceController = interfaceController
         service.load { [weak self] stations in
-            self?.showList(stations, on: interfaceController)
+            let radius = UserDefaults.standard.integer(forKey: "stationRadiusKm")
+            let filtered = stations.filter { radius == 0 || $0.distanceKm <= Double(radius) }
+            self?.showList(filtered, on: interfaceController, radius: radius)
         }
     }
 
@@ -17,7 +19,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         self.interfaceController = nil
     }
 
-    private func showList(_ stations: [FuelStation], on controller: CPInterfaceController) {
+    private func showList(_ stations: [FuelStation], on controller: CPInterfaceController, radius: Int) {
         let items = stations.sorted {
             ($0.prices[.unleaded91] ?? .infinity) < ($1.prices[.unleaded91] ?? .infinity)
         }.map { station -> CPListItem in
@@ -30,7 +32,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             }
             return item
         }
-        let template = CPListTemplate(title: "Nearby Fuel", sections: [CPListSection(items: items)])
+        let radiusText = radius == 0 ? "All" : "\(radius) km"
+        let template = CPListTemplate(title: "Nearby Fuel (\(radiusText))", sections: [CPListSection(items: items)])
         controller.setRootTemplate(template, animated: true, completion: nil)
     }
 

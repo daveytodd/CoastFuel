@@ -6,11 +6,23 @@ struct ContentView: View {
     @State private var selectedFuel: FuelType = .unleaded91
     @State private var showMap = false
     @State private var alertsEnabled = false
-    private var stations: [FuelStation] { service.stations.sorted { ($0.prices[selectedFuel] ?? .infinity) < ($1.prices[selectedFuel] ?? .infinity) } }
+    @AppStorage("stationRadiusKm") private var stationRadiusKm = 10
+    private let radiusOptions = [5, 10, 25, 50, 0]
+    private var stations: [FuelStation] {
+        service.stations
+            .filter { stationRadiusKm == 0 || station.distanceKm <= Double(stationRadiusKm) }
+            .sorted { ($0.prices[selectedFuel] ?? .infinity) < ($1.prices[selectedFuel] ?? .infinity) }
+    }
+    private var radiusLabel: String { stationRadiusKm == 0 ? "All" : "\(stationRadiusKm) km" }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 12) {
                 Picker("Fuel", selection: $selectedFuel) { ForEach(FuelType.allCases) { Text($0.rawValue).tag($0) } }.pickerStyle(.menu).tint(.mint).padding(.horizontal)
+                Picker("Radius", selection: $stationRadiusKm) {
+                    ForEach(radiusOptions, id: \\.self) { radius in Text(radius == 0 ? "All" : "\(radius) km").tag(radius) }
+                }.pickerStyle(.segmented).padding(.horizontal)
+                Text("\(stations.count) stations within \(radiusLabel)").font(.caption).foregroundStyle(.secondary)
                 Toggle(isOn: $showMap) { Label(showMap ? "Map" : "Stations", systemImage: showMap ? "map" : "list.bullet") }.padding(.horizontal)
                 Toggle("Price alerts", isOn: $alertsEnabled).tint(.mint).padding(.horizontal)
                 if showMap { Map { ForEach(stations) { station in Annotation(station.name, coordinate: station.coordinate.location) { Text(station.prices[selectedFuel].map { String(format:"%.1f¢",$0) } ?? "—").font(.caption.bold()).padding(7).background(.mint,in:Circle()).foregroundStyle(.black) } } }.mapStyle(.standard(elevation:.realistic)).clipShape(RoundedRectangle(cornerRadius:18)).padding() }
