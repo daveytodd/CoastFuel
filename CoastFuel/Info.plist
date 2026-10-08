@@ -9,6 +9,7 @@
 <key>CFBundleVersion</key><string>1</string>
 <key>UILaunchScreen</key><dict/>
 <key>NSLocationWhenInUseUsageDescription</key><string>Your location helps find nearby fuel stations.</string>
+<key>NSBluetoothAlwaysUsageDescription</key><string>CoastFuel uses Bluetooth to connect to your OBD-II scanner to read fuel level and telemetry.</string>
 <key>UIApplicationSceneManifest</key><dict>
  <key>UIApplicationSupportsMultipleScenes</key><true/>
  <key>UISceneConfigurations</key><dict>
