@@ -2,53 +2,44 @@ import Combine
 import CoreBluetooth
 import Foundation
 
-/// Connects to BLE OBD-II adapters that expose a writable and notifying characteristic.
+/// BLE OBD-II client. CoreBluetooth delegate callbacks are delivered on the main queue,
+/// which keeps this ObservableObject's UI-facing state on the UI thread without actor isolation.
 /// Classic Bluetooth/SPP adapters are not accessible through CoreBluetooth on iOS.
-@MainActor
 final class OBDManager: NSObject, ObservableObject {
-    enum ConnectionState: String {
-        case idle = "Idle"
-        case scanning = "Scanning for OBD-II adapters…"
-        case connecting = "Connecting…"
-        case discovering = "Finding adapter services…"
-        case initializing = "Initializing ELM327…"
-        case ready = "Connected"
-        case failed = "Connection failed"
+    enum ConnectionState {
+        case idle, scanning, connecting, discovering, initializing, ready, failed
     }
 
     @Published private(set) var isConnected = false
     @Published private(set) var connectionState: ConnectionState = .idle
     @Published private(set) var fuelLevelPercentage: Double?
+    @Published private(set) var lastFuelReadAt: Date?
     @Published private(set) var discoveredAdapters: [CBPeripheral] = []
     @Published private(set) var diagnosticLogs: [String] = []
 
-    private let centralQueue = DispatchQueue(label: "com.daveytodd.CoastFuel.obd-central")
     private var central: CBCentralManager!
     private var connectedPeripheral: CBPeripheral?
     private var writeCharacteristic: CBCharacteristic?
-    private var notifyCharacteristic: CBCharacteristic?
     private var responseBuffer = ""
     private var commandQueue: [String] = []
     private var activeCommand: String?
     private var isScanning = false
-
     private let knownServiceUUIDs: Set<String> = ["FFF0", "18F0"]
 
     override init() {
         super.init()
-        central = CBCentralManager(delegate: self, queue: centralQueue)
+        // Delegate callbacks are serialized on the main queue; public methods are called by SwiftUI there.
+        central = CBCentralManager(delegate: self, queue: .main)
     }
 
     func startScanning() {
         guard central.state == .poweredOn else {
-            log("Bluetooth is not ready (state: \(centralStateDescription(central.state))).")
+            log("Bluetooth is not ready (state: \(central.state.rawValue)).")
             return
         }
         discoveredAdapters.removeAll()
         connectionState = .scanning
         isScanning = true
-        // Scan broadly: many BLE adapters use vendor-specific service UUIDs. Filter candidates
-        // after discovery by advertised name or common OBD service UUID.
         central.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
         log("Scanning for BLE OBD-II adapters. Make sure the scanner is powered and not connected elsewhere.")
     }
@@ -74,30 +65,20 @@ final class OBDManager: NSObject, ObservableObject {
         clearConnection(state: .idle)
     }
 
-    /// Requests Mode 01 PID 2F (fuel tank level). The ECU may not support this PID.
     func requestFuelLevel() {
-        guard isConnected, writeCharacteristic != nil else {
-            log("Cannot request fuel level: no ready OBD-II connection.")
-            return
-        }
-        enqueue("012F")
-    }
-
-    private func enqueue(_ command: String) {
-        commandQueue.append(command)
+        guard isConnected, writeCharacteristic != nil else { return }
+        commandQueue.append("012F")
         sendNextCommandIfReady()
     }
 
     private func sendNextCommandIfReady() {
         guard activeCommand == nil, !commandQueue.isEmpty,
-              let peripheral = connectedPeripheral,
-              let characteristic = writeCharacteristic else { return }
+              let peripheral = connectedPeripheral, let characteristic = writeCharacteristic else { return }
         let command = commandQueue.removeFirst()
         activeCommand = command
         responseBuffer = ""
-        let data = Data((command + "\r").utf8)
-        let writeType: CBCharacteristicWriteType = characteristic.properties.contains(.write) ? .withResponse : .withoutResponse
-        peripheral.writeValue(data, for: characteristic, type: writeType)
+        let type: CBCharacteristicWriteType = characteristic.properties.contains(.write) ? .withResponse : .withoutResponse
+        peripheral.writeValue(Data((command + "\r").utf8), for: characteristic, type: type)
         log("> \(command)")
     }
 
@@ -105,12 +86,9 @@ final class OBDManager: NSObject, ObservableObject {
         let command = activeCommand
         log("< \(response.trimmingCharacters(in: .whitespacesAndNewlines))")
         if command == "012F" { parseFuelLevel(from: response) }
-        if command == "ATZ" {
-            connectionState = .initializing
-        }
         activeCommand = nil
         sendNextCommandIfReady()
-        if commandQueue.isEmpty, command == "ATSP0" || (commandQueue.isEmpty && command != nil && command != "012F") {
+        if command == "ATSP0" {
             connectionState = .ready
             isConnected = true
             log("ELM327 initialization complete.")
@@ -118,11 +96,8 @@ final class OBDManager: NSObject, ObservableObject {
     }
 
     private func parseFuelLevel(from response: String) {
-        let normalized = response
-            .replacingOccurrences(of: "\r", with: " ")
-            .replacingOccurrences(of: "\n", with: " ")
-            .replacingOccurrences(of: ">", with: " ")
-            .uppercased()
+        let normalized = response.replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: ">", with: " ").uppercased()
         let tokens = normalized.split(whereSeparator: { $0.isWhitespace }).map(String.init)
         guard let marker = tokens.firstIndex(of: "412F"), tokens.indices.contains(marker + 1),
               let raw = UInt8(tokens[marker + 1], radix: 16) else {
@@ -130,13 +105,13 @@ final class OBDManager: NSObject, ObservableObject {
             return
         }
         fuelLevelPercentage = Double(raw) * 100.0 / 255.0
+        lastFuelReadAt = Date()
         log(String(format: "Fuel level: %.1f%%", fuelLevelPercentage ?? 0))
     }
 
     private func clearConnection(state: ConnectionState) {
         connectedPeripheral = nil
         writeCharacteristic = nil
-        notifyCharacteristic = nil
         commandQueue.removeAll()
         activeCommand = nil
         responseBuffer = ""
@@ -149,44 +124,31 @@ final class OBDManager: NSObject, ObservableObject {
         diagnosticLogs.append("[\(timestamp)] \(message)")
         if diagnosticLogs.count > 200 { diagnosticLogs.removeFirst(diagnosticLogs.count - 200) }
     }
-
-    private func centralStateDescription(_ state: CBManagerState) -> String {
-        switch state {
-        case .poweredOn: return "powered on"
-        case .poweredOff: return "powered off"
-        case .resetting: return "resetting"
-        case .unauthorized: return "unauthorized"
-        case .unsupported: return "unsupported"
-        case .unknown: return "unknown"
-        @unknown default: return "unknown"
-        }
-    }
 }
 
 extension OBDManager: CBCentralManagerDelegate {
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        if central.state != .poweredOn {
+        if central.state == .poweredOn { log("Bluetooth is ready.") }
+        else {
             if isScanning { central.stopScan(); isScanning = false }
             if central.state == .poweredOff || central.state == .unauthorized || central.state == .unsupported {
                 connectionState = .failed
             }
-            log("Bluetooth state changed: \(centralStateDescription(central.state)).")
-        } else {
-            log("Bluetooth is ready.")
+            log("Bluetooth state changed (state: \(central.state.rawValue)).")
         }
     }
 
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral,
                         advertisementData: [String: Any], rssi RSSI: NSNumber) {
-        let advertisedName = (advertisementData[CBAdvertisementDataLocalNameKey] as? String) ?? peripheral.name ?? ""
-        let advertisedServices = (advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? []).map(\.uuidString)
-        let looksLikeOBD = advertisedName.localizedCaseInsensitiveContains("OBD")
-            || advertisedName.localizedCaseInsensitiveContains("V-LINK")
-            || advertisedName.localizedCaseInsensitiveContains("VLINK")
-            || advertisedServices.contains { knownServiceUUIDs.contains($0.uppercased()) }
-        guard looksLikeOBD, !discoveredAdapters.contains(where: { $0.identifier == peripheral.identifier }) else { return }
+        let name = (advertisementData[CBAdvertisementDataLocalNameKey] as? String) ?? peripheral.name ?? ""
+        let services = (advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? []).map { $0.uuidString.uppercased() }
+        let candidate = name.localizedCaseInsensitiveContains("OBD")
+            || name.localizedCaseInsensitiveContains("V-LINK")
+            || name.localizedCaseInsensitiveContains("VLINK")
+            || services.contains { knownServiceUUIDs.contains($0) }
+        guard candidate, !discoveredAdapters.contains(where: { $0.identifier == peripheral.identifier }) else { return }
         discoveredAdapters.append(peripheral)
-        log("Found adapter: \(advertisedName.isEmpty ? peripheral.identifier.uuidString : advertisedName) (RSSI \(RSSI)).")
+        log("Found adapter: \(name.isEmpty ? peripheral.identifier.uuidString : name) (RSSI \(RSSI)).")
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
@@ -221,17 +183,17 @@ extension OBDManager: CBPeripheralDelegate {
         if let error { log("Characteristic discovery failed: \(error.localizedDescription)"); return }
         for characteristic in service.characteristics ?? [] {
             if characteristic.properties.contains(.notify) || characteristic.properties.contains(.indicate) {
-                notifyCharacteristic = characteristic
                 peripheral.setNotifyValue(true, for: characteristic)
             }
             if characteristic.properties.contains(.write) || characteristic.properties.contains(.writeWithoutResponse) {
                 writeCharacteristic = characteristic
             }
         }
-        guard writeCharacteristic != nil, notifyCharacteristic != nil else { return }
-        guard commandQueue.isEmpty, activeCommand == nil else { return }
+        guard let readable = (peripheral.services ?? []).flatMap({ $0.characteristics ?? [] })
+            .first(where: { $0.properties.contains(.notify) || $0.properties.contains(.indicate) }),
+              writeCharacteristic != nil, commandQueue.isEmpty, activeCommand == nil else { return }
+        _ = readable
         connectionState = .initializing
-        isConnected = true
         commandQueue = ["ATZ", "ATE0", "ATL0", "ATSP0"]
         log("Found BLE read/write characteristics; initializing ELM327.")
         sendNextCommandIfReady()
@@ -246,9 +208,9 @@ extension OBDManager: CBPeripheralDelegate {
         guard let data = characteristic.value, let text = String(data: data, encoding: .utf8) else { return }
         responseBuffer += text
         if responseBuffer.contains(">") {
-            let completeResponse = responseBuffer
+            let response = responseBuffer
             responseBuffer = ""
-            handleResponse(completeResponse)
+            handleResponse(response)
         }
     }
 
