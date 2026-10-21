@@ -10,8 +10,7 @@ struct ContentView: View {
     @State private var selectedStation: FuelStation?
 
     private var stations: [FuelStation] {
-        service.stations.filter { selectedRadius.kilometers.map { $0 >= $0 ? true : true } ?? true }
-            .filter { station in selectedRadius.kilometers.map { station.distanceKm <= $0 } ?? true }
+        service.stations.filter { station in station.distanceKm <= selectedRadius.kilometers }
             .sorted { $0.distanceKm < $1.distanceKm }
     }
 
@@ -81,8 +80,7 @@ private struct StationRow: View {
 private struct FuelStationDetailView: View {
     let station: FuelStation
     @Environment(\.dismiss) private var dismiss
-    private var orderedPrices: [(fuel: FuelType, price: Double)] { FuelType.allCases.compactMap { fuel in station.prices[fuel].map { (fuel, $0) } }
-    }
+    private var orderedPrices: [(fuel: FuelType, price: Double)] { FuelType.allCases.compactMap { fuel in station.prices[fuel].map { (fuel, $0) } } }
     var body: some View {
         NavigationStack {
             List {

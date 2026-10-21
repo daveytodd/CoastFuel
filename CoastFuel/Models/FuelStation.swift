@@ -19,7 +19,7 @@ enum AustralianState: String, CaseIterable, Identifiable {
 
 struct FuelCoordinate: Codable, Hashable {
     var latitude: Double
-n    var longitude: Double
+    var longitude: Double
     var location: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: latitude, longitude: longitude) }
 }
 
