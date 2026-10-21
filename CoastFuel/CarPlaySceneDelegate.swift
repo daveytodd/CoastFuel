@@ -19,11 +19,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         let items = nearby.sorted { ($0.prices[.unleaded91] ?? .infinity) < ($1.prices[.unleaded91] ?? .infinity) }.map { station -> CPListItem in
             let distance = String(format: "%.1f", station.distanceKm)
             let price = station.prices[.unleaded91].map { String(format: "%.1f¢/L", $0) } ?? "—"
-            let item = CPListItem(text: station.name, detailText: "91: \(price) · \(distance) km")
+            let item = CPListItem(text: station.name, detailText: "91: \\(price) · \\(distance) km")
             item.handler = { [weak self] _, completion in self?.showStation(station); completion() }
             return item
         }
-        let title = limit.map { "Nearby Fuel · \(Int($0)) km" } ?? "Nearby Fuel · All"
+        let title = limit.map { "Nearby Fuel · \\(Int($0)) km" } ?? "Nearby Fuel · All"
         controller.setRootTemplate(CPListTemplate(title: title, sections: [CPListSection(items: items)]), animated: true, completion: nil)
     }
     private func showStation(_ station: FuelStation) {
@@ -35,5 +35,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 }
 
 private final class CarPlayFuelStore {
-    func load(completion: @escaping ([FuelStation]) -> Void) { completion(FuelDataService.mockStations) }
+    @MainActor
+    func load(completion: @escaping ([FuelStation]) -> Void) {
+        let service = FuelDataService()
+        service.refreshStations()
+        completion(service.stations)
+    }
 }
