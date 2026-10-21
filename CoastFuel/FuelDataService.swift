@@ -58,9 +58,9 @@ final class FuelDataService: ObservableObject {
     private static func parseCSV(_ csv: String) -> [FuelStation] {
         let records = csvRecords(csv)
         guard let rawHeader = records.first else { return [] }
-        let header = rawHeader.enumerated().map { index, value in
+        let header = rawHeader.map { value in
             value.trimmingCharacters(in: .whitespacesAndNewlines)
-                .replacingOccurrences(of: "\\u{feff}", with: "")
+                .replacingOccurrences(of: "\u{feff}", with: "")
                 .lowercased()
         }
         func index(_ candidates: [String]) -> Int? {
@@ -81,7 +81,7 @@ final class FuelDataService: ObservableObject {
                   let longitude = Double(columns[longitudeIndex].trimmingCharacters(in: .whitespacesAndNewlines)),
                   let price = Double(priceText),
                   (-90...90).contains(latitude), (-180...180).contains(longitude), price > 0 else { return nil }
-            return FuelStation(id: "qld-\(name)-\(latitude)", name: name, address: "Queensland", coordinate: .init(latitude: latitude, longitude: longitude), prices: [.unleaded91: price], amenities: [], distanceKm: 0, updatedAt: Date())
+            return FuelStation(id: "qld-\(name)-\(latitude)", name: name, address: "Queensland", coordinate: FuelCoordinate(latitude: latitude, longitude: longitude), prices: [.unleaded91: price], amenities: [], distanceKm: 0, updatedAt: Date())
         }
     }
 
@@ -105,8 +105,8 @@ final class FuelDataService: ObservableObject {
             } else if char == "," && !inQuotes {
                 record.append(field)
                 field = ""
-            } else if (char == "\\n" || char == "\\r") && !inQuotes {
-                if char == "\\r", i + 1 < chars.count, chars[i + 1] == "\\n" { i += 1 }
+            } else if (char == "\n" || char == "\r") && !inQuotes {
+                if char == "\r", i + 1 < chars.count, chars[i + 1] == "\n" { i += 1 }
                 record.append(field)
                 if record.contains(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) { records.append(record) }
                 record = []
