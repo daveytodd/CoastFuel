@@ -43,6 +43,7 @@ final class FuelDataService: ObservableObject {
     private static let fixtures: [Fixture] = [
         .init(state: .qld, station: make("qld-southport", "7-Eleven Southport", "138 Slatyer Ave, Southport QLD 4215", -27.9964, 153.3997, 184.9)),
         .init(state: .qld, station: make("qld-helensvale", "BP Helensvale", "Discovery Dr, Helensvale QLD 4212", -27.9185, 153.3368, 182.9)),
+        .init(state: .qld, station: make("qld-liberty-helensvale", "Liberty Helensvale", "21 Millennium Circuit, Helensvale QLD 4212", -27.915, 153.332, 176.9)),
         .init(state: .qld, station: make("qld-hope-island", "Ampol Hope Island", "Hope Island Rd, Hope Island QLD 4212", -27.8704, 153.3670, 186.9)),
         .init(state: .qld, station: make("qld-oxenford", "Shell Oxenford", "Old Pacific Hwy, Oxenford QLD 4210", -27.8900, 153.3140, 180.9)),
         .init(state: .qld, station: make("qld-coomera", "7-Eleven Coomera", "Days Rd, Coomera QLD 4209", -27.8557, 153.3158, 183.9)),
