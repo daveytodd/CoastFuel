@@ -6,9 +6,20 @@ enum FuelType: String, CaseIterable, Identifiable, Codable {
     var id: String { rawValue }
 }
 
+enum AustralianState: String, CaseIterable, Identifiable {
+    case qld = "QLD", nsw = "NSW", vic = "VIC", wa = "WA", sa = "SA", tas = "TAS", act = "ACT", nt = "NT"
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .qld: "Queensland"; case .nsw: "New South Wales"; case .vic: "Victoria"; case .wa: "Western Australia"
+        case .sa: "South Australia"; case .tas: "Tasmania"; case .act: "Australian Capital Territory"; case .nt: "Northern Territory"
+        }
+    }
+}
+
 struct FuelCoordinate: Codable, Hashable {
     var latitude: Double
-    var longitude: Double
+n    var longitude: Double
     var location: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: latitude, longitude: longitude) }
 }
 
