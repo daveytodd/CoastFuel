@@ -5,20 +5,29 @@ import CoreLocation
 struct ContentView: View {
     @StateObject private var service = FuelDataService()
     @StateObject private var locationManager = FuelLocationManager()
+    @StateObject private var obdManager = OBDManager()
     @State private var selectedFuel: FuelType = .unleaded91
     @State private var selectedRadius: StationRadius = .tenKm
     @State private var showMap = false
     @State private var alertsEnabled = false
     @State private var selectedStation: FuelStation?
+    private let fuelRangeAdvisor = FuelRangeAdvisor()
 
     private var stations: [FuelStation] {
-        service.stations.filter { station in station.distanceKm <= selectedRadius.kilometers }
-            .sorted { $0.distanceKm < $1.distanceKm }
+        service.stations.filter { $0.distanceKm <= selectedRadius.kilometers }.sorted { $0.distanceKm < $1.distanceKm }
+    }
+    private var fuelRecommendation: FuelRangeAdvisor.Recommendation? {
+        fuelRangeAdvisor.recommendation(fuelLevelPercentage: obdManager.fuelLevelPercentage, stations: service.stations, fuel: selectedFuel)
+    }
+    private var obdStatus: String {
+        guard obdManager.isConnected else { return "Disconnected" }
+        return obdManager.isVehicleRunning ? "Engine Running" : "Engine Off"
     }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 12) {
+                obdCard
                 HStack {
                     Picker("State", selection: $service.selectedState) {
                         ForEach(AustralianState.allCases) { state in Text(state.rawValue).tag(state) }
@@ -49,25 +58,53 @@ struct ContentView: View {
             }
             .background(Color.black).navigationTitle("CoastFuel").task {
                 await service.load()
-                locationManager.onLocationUpdate = { location in
-                    service.setUserLocation(location)
-                }
+                locationManager.onLocationUpdate = { location in service.setUserLocation(location) }
                 locationManager.requestCurrentLocation()
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        locationManager.requestCurrentLocation()
-                    } label: {
-                        Image(systemName: "location.fill")
-                    }
-                    .tint(.mint)
-                    .accessibilityLabel("Refresh stations from current location")
+                    Button { locationManager.requestCurrentLocation() } label: { Image(systemName: "location.fill") }
+                        .tint(.mint).accessibilityLabel("Refresh stations from current location")
                 }
             }
         }
         .sheet(item: $selectedStation) { station in FuelStationDetailView(station: station) }
         .preferredColorScheme(.dark)
+    }
+
+    private var obdCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label(obdStatus, systemImage: obdManager.isConnected ? (obdManager.isVehicleRunning ? "car.fill" : "car") : "bolt.slash.fill")
+                    .font(.headline).foregroundStyle(obdManager.isConnected ? .mint : .secondary)
+                Spacer()
+                if obdManager.isConnected {
+                    Button("Disconnect") { obdManager.disconnect() }.tint(.orange)
+                } else {
+                    Button(obdManager.connectionState == .scanning ? "Scanning…" : "Connect") {
+                        obdManager.startScanning()
+                    }.tint(.mint)
+                    .disabled(obdManager.connectionState == .scanning || obdManager.connectionState == .connecting || obdManager.connectionState == .discovering || obdManager.connectionState == .initializing)
+                }
+            }
+            HStack {
+                metric(title: "Fuel", value: obdManager.fuelLevelPercentage.map { String(format: "%.0f%%", $0) } ?? "—")
+                Spacer()
+                metric(title: "Estimated range", value: fuelRecommendation.map { String(format: "%.0f km", $0.rangeKm) } ?? "—")
+                if obdManager.isConnected && obdManager.isVehicleRunning {
+                    Button { obdManager.requestFuelLevel() } label: { Image(systemName: "arrow.clockwise") }.tint(.mint).accessibilityLabel("Refresh fuel level")
+                }
+            }
+            Text(fuelRecommendation?.text ?? (obdManager.isConnected ? "Waiting for live fuel level…" : "Connect an OBD-II adapter for live fuel advice."))
+                .font(.subheadline).foregroundStyle(.secondary)
+        }
+        .padding(14).background(Color(white: 0.09), in: RoundedRectangle(cornerRadius: 16)).padding(.horizontal)
+        .onChange(of: obdManager.isConnected) { _, connected in if connected { obdManager.requestFuelLevel() } }
+        .onChange(of: obdManager.isVehicleRunning) { _, running in if running { obdManager.requestFuelLevel() } }
+    }
+
+    private func metric(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) { Text(title).font(.caption).foregroundStyle(.secondary); Text(value).font(.title3.bold()).foregroundStyle(.white) }
     }
 }
 
@@ -75,40 +112,22 @@ struct ContentView: View {
 private final class FuelLocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     var onLocationUpdate: ((CLLocation) -> Void)?
-
-    override init() {
-        super.init()
-        manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyBest
-    }
-
+    override init() { super.init(); manager.delegate = self; manager.desiredAccuracy = kCLLocationAccuracyBest }
     func requestCurrentLocation() {
         switch manager.authorizationStatus {
-        case .notDetermined:
-            manager.requestWhenInUseAuthorization()
-        case .authorizedWhenInUse, .authorizedAlways:
-            manager.requestLocation()
-        case .denied, .restricted:
-            break
-        @unknown default:
-            break
+        case .notDetermined: manager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse, .authorizedAlways: manager.requestLocation()
+        case .denied, .restricted: break
+        @unknown default: break
         }
     }
-
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        if manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways {
-            manager.requestLocation()
-        }
+        if manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways { manager.requestLocation() }
     }
-
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let location = locations.last else { return }
-        onLocationUpdate?(location)
+        guard let location = locations.last else { return }; onLocationUpdate?(location)
     }
-
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        print("Unable to obtain current location: \\(error.localizedDescription)")
-    }
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) { print("Unable to obtain current location: \\(error.localizedDescription)") }
 }
 
 enum StationRadius: String, CaseIterable, Identifiable {
