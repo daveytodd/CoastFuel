@@ -41,6 +41,7 @@ struct ContentView: View {
                 .navigationTitle("CoastFuel")
                 .onAppear { syncFuelTypeWithActiveVehicle() }
                 .onChange(of: profileStore.activeProfileID) { _, _ in syncFuelTypeWithActiveVehicle() }
+                .onChange(of: profileStore.activeProfile.preferredFuelType) { _, _ in syncFuelTypeWithActiveVehicle() }
                 .task { await service.load(); locationManager.onLocationUpdate = { location in service.setUserLocation(location) }; locationManager.requestCurrentLocation() }
                 .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { locationManager.requestCurrentLocation() } label: { Image(systemName: "location.fill") }.tint(.mint).accessibilityLabel("Refresh stations from current location") } }
             }
@@ -54,9 +55,14 @@ struct ContentView: View {
         .sheet(isPresented: $showVehicleSettings) { VehicleProfilesView(store: profileStore) }
     }
 
+    private func selectVehicle(_ id: UUID) {
+        profileStore.select(id)
+        syncFuelTypeWithActiveVehicle()
+    }
+
     private func syncFuelTypeWithActiveVehicle() {
-        guard let preferredFuel = FuelType(rawValue: profileStore.activeProfile.preferredFuelType) else { selectedFuel = profileStore.activeProfile.fuelType; return }
-        selectedFuel = preferredFuel
+        let profile = profileStore.activeProfile
+        selectedFuel = FuelType(rawValue: profile.preferredFuelType) ?? profile.fuelType
     }
 
     private var vehicleRangeCard: some View {
@@ -80,7 +86,7 @@ struct ContentView: View {
                 VStack(alignment: .leading) { Text("Fuel level").font(.caption).foregroundStyle(.secondary); Text(obdManager.fuelLevelPercentage.map { String(format: "%.0f%%", $0) } ?? "—").font(.title2.bold()) }
                 VStack(alignment: .leading) { Text("Estimated range").font(.caption).foregroundStyle(.secondary); Text(rangeAdvisor.estimatedRangeKm(fuelLevelPercentage: obdManager.fuelLevelPercentage).map { String(format: "%.0f km", $0) } ?? "—").font(.title2.bold()).foregroundStyle(.mint) }
                 Spacer()
-                Menu("Switch") { ForEach(profileStore.profiles) { profile in Button { profileStore.select(profile.id) } label: { if profile.id == profileStore.activeProfileID { Label(profile.name, systemImage: "checkmark") } else { Text(profile.name) } } }; Button("Add or edit profiles…") { showVehicleSettings = true } }.font(.caption).tint(.mint)
+                Menu("Switch") { ForEach(profileStore.profiles) { profile in Button { selectVehicle(profile.id) } label: { if profile.id == profileStore.activeProfileID { Label(profile.name, systemImage: "checkmark") } else { Text(profile.name) } } }; Button("Add or edit profiles…") { showVehicleSettings = true } }.font(.caption).tint(.mint)
             }
             Text(rangeRecommendation.text).font(.subheadline).foregroundStyle(rangeRecommendation.isLowFuel ? .orange : .primary).fixedSize(horizontal: false, vertical: true)
             if obdManager.isVehicleRunning { Button("Refresh fuel level") { obdManager.requestFuelLevel() }.font(.caption.bold()).tint(.mint) }
@@ -102,14 +108,12 @@ private struct SettingsView: View {
     @ObservedObject var profileStore: VehicleProfileStore
     @AppStorage("appTheme") private var appTheme = "automatic"
     @State private var showVehicleSettings = false
-    private let black = Color(red: 0, green: 0, blue: 0)
     var body: some View {
         NavigationStack {
             List {
                 Section {
                     ShareLink(item: "Check out CoastFuel — find nearby fuel prices and plan your next stop.") {
-                        Label("Share CoastFuel", systemImage: "square.and.arrow.up.fill")
-                            .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 10)
+                        Label("Share CoastFuel", systemImage: "square.and.arrow.up.fill").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 10)
                     }.tint(.mint).listRowBackground(Color(uiColor: .secondarySystemBackground))
                 }
                 Section("App Icon") {
@@ -156,7 +160,7 @@ private struct VehicleProfilesView: View {
         NavigationStack {
             List {
                 Section("Active vehicle") {
-                    Picker("Select profile", selection: Binding(get: { store.activeProfileID }, set: { store.select($0) })) { ForEach(store.profiles) { profile in Text(profile.name).tag(profile.id) } }
+                    Picker("Select profile", selection: Binding(get: { store.activeProfileID }, set: { id in store.select(id) })) { ForEach(store.profiles) { profile in Text(profile.name).tag(profile.id) } }
                     Text("\(store.activeProfile.fuelType.rawValue) · \(store.activeProfile.tankCapacityLitres, specifier: "%.1f") L · \(store.activeProfile.averageConsumptionLitresPer100Km, specifier: "%.1f") L/100 km").font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Saved profiles") {
@@ -234,10 +238,30 @@ private struct StationRow: View {
 private struct FuelStationDetailView: View {
     let station: FuelStation
     @Environment(\.dismiss) private var dismiss
-    private var orderedPrices: [(fuel: FuelType, price: Double)] { FuelType.allCases.compactMap { fuel in station.prices[fuel].map { (fuel, $0) } }
+    private var orderedPrices: [(fuel: FuelType, price: Double)] {
+        FuelType.allCases.compactMap { fuel in station.prices[fuel].map { (fuel, $0) } }
+    }
     var body: some View {
         NavigationStack {
-            List { Section(station.name) { Text(station.address); Text(String(format: "%.1f km away", station.distanceKm)); ForEach(orderedPrices, id: \.fuel) { entry in HStack { Text(entry.fuel.rawValue); Spacer(); Text(String(format: "%.1f¢/L", entry.price)).foregroundStyle(.mint) } } }; Section("Amenities") { ForEach(station.amenities, id: \.self) { Text($0) } }; Section { Button("Open in Apple Maps") { let item = MKMapItem(placemark: MKPlacemark(coordinate: station.coordinate.location)); item.name = station.name; item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving]) } } }.navigationTitle("Station details").toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() }.tint(.mint) } }
+            List {
+                Section(station.name) {
+                    Text(station.address)
+                    Text(String(format: "%.1f km away", station.distanceKm))
+                    ForEach(orderedPrices, id: \.fuel) { entry in
+                        HStack { Text(entry.fuel.rawValue); Spacer(); Text(String(format: "%.1f¢/L", entry.price)).foregroundStyle(.mint) }
+                    }
+                }
+                Section("Amenities") { ForEach(station.amenities, id: \.self) { Text($0) } }
+                Section {
+                    Button("Open in Apple Maps") {
+                        let item = MKMapItem(placemark: MKPlacemark(coordinate: station.coordinate.location))
+                        item.name = station.name
+                        item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving])
+                    }
+                }
+            }
+            .navigationTitle("Station details")
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() }.tint(.mint) } }
         }
     }
 }
