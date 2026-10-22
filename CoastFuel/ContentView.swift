@@ -1,8 +1,10 @@
 import SwiftUI
 import MapKit
+import CoreLocation
 
 struct ContentView: View {
     @StateObject private var service = FuelDataService()
+    @StateObject private var locationManager = FuelLocationManager()
     @State private var selectedFuel: FuelType = .unleaded91
     @State private var selectedRadius: StationRadius = .tenKm
     @State private var showMap = false
@@ -28,7 +30,7 @@ struct ContentView: View {
                 Picker("Search radius", selection: $selectedRadius) {
                     ForEach(StationRadius.allCases) { radius in Text(radius.title).tag(radius) }
                 }.pickerStyle(.segmented).padding(.horizontal)
-                Text("\(stations.count) stations within \(selectedRadius.title)").font(.caption).foregroundStyle(.secondary)
+                Text("\\(stations.count) stations within \\(selectedRadius.title)").font(.caption).foregroundStyle(.secondary)
                 Toggle(isOn: $showMap) { Label(showMap ? "Map" : "Stations", systemImage: showMap ? "map" : "list.bullet") }.padding(.horizontal)
                 Toggle("Price alerts", isOn: $alertsEnabled).tint(.mint).padding(.horizontal)
                 if showMap {
@@ -45,11 +47,67 @@ struct ContentView: View {
                     }.listStyle(.plain)
                 }
             }
-            .background(Color.black).navigationTitle("CoastFuel").task { await service.load() }
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { service.refreshStations() } label: { Image(systemName: "arrow.clockwise") }.tint(.mint) } }
+            .background(Color.black).navigationTitle("CoastFuel").task {
+                await service.load()
+                locationManager.onLocationUpdate = { location in
+                    service.setUserLocation(location)
+                }
+                locationManager.requestCurrentLocation()
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        locationManager.requestCurrentLocation()
+                    } label: {
+                        Image(systemName: "location.fill")
+                    }
+                    .tint(.mint)
+                    .accessibilityLabel("Refresh stations from current location")
+                }
+            }
         }
         .sheet(item: $selectedStation) { station in FuelStationDetailView(station: station) }
         .preferredColorScheme(.dark)
+    }
+}
+
+@MainActor
+private final class FuelLocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
+    private let manager = CLLocationManager()
+    var onLocationUpdate: ((CLLocation) -> Void)?
+
+    override init() {
+        super.init()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyBest
+    }
+
+    func requestCurrentLocation() {
+        switch manager.authorizationStatus {
+        case .notDetermined:
+            manager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse, .authorizedAlways:
+            manager.requestLocation()
+        case .denied, .restricted:
+            break
+        @unknown default:
+            break
+        }
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        if manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways {
+            manager.requestLocation()
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let location = locations.last else { return }
+        onLocationUpdate?(location)
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        print("Unable to obtain current location: \\(error.localizedDescription)")
     }
 }
 
@@ -69,7 +127,7 @@ private struct StationRow: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text(station.name).font(.headline).foregroundStyle(.white)
                 Text(station.address).font(.caption).foregroundStyle(.secondary)
-                Text("\(station.distanceKm, specifier: "%.1f") km · \(station.amenities.joined(separator: " · "))").font(.caption2).foregroundStyle(.secondary)
+                Text("\\(station.distanceKm, specifier: "%.1f") km · \\(station.amenities.joined(separator: " · "))").font(.caption2).foregroundStyle(.secondary)
             }
             Spacer()
             Text(station.prices[fuel].map { String(format: "%.1f¢", $0) } ?? "—").font(.title3.bold()).foregroundStyle(.mint)
@@ -79,7 +137,7 @@ private struct StationRow: View {
 
 private struct FuelStationDetailView: View {
     let station: FuelStation
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\\.dismiss) private var dismiss
     private var orderedPrices: [(fuel: FuelType, price: Double)] { FuelType.allCases.compactMap { fuel in station.prices[fuel].map { (fuel, $0) } } }
     var body: some View {
         NavigationStack {
@@ -87,9 +145,9 @@ private struct FuelStationDetailView: View {
                 Section(station.name) {
                     Text(station.address)
                     Text(String(format: "%.1f km away", station.distanceKm))
-                    ForEach(orderedPrices, id: \.fuel) { entry in HStack { Text(entry.fuel.rawValue); Spacer(); Text(String(format: "%.1f¢/L", entry.price)).foregroundStyle(.mint) } }
+                    ForEach(orderedPrices, id: \\.fuel) { entry in HStack { Text(entry.fuel.rawValue); Spacer(); Text(String(format: "%.1f¢/L", entry.price)).foregroundStyle(.mint) } }
                 }
-                Section("Amenities") { ForEach(station.amenities, id: \.self) { Text($0) } }
+                Section("Amenities") { ForEach(station.amenities, id: \\.self) { Text($0) } }
                 Section { Button("Open in Apple Maps") {
                     let item = MKMapItem(placemark: MKPlacemark(coordinate: station.coordinate.location)); item.name = station.name
                     item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving])
