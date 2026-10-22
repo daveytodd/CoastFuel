@@ -67,10 +67,14 @@ struct ContentView: View {
                 Text(obdManager.isVehicleRunning ? "Engine Running" : (obdManager.isConnected ? "Engine Off" : "Disconnected")).font(.caption.bold()).foregroundStyle(.secondary)
                 Menu {
                     if obdManager.isConnected { Button("Disconnect OBD-II", role: .destructive) { obdManager.disconnect() } }
-                    else { Button("Scan for OBD-II adapter") { obdManager.startScanning() }; ForEach(obdManager.discoveredAdapters, id: \.identifier) { peripheral in Button(peripheral.name ?? "OBD-II adapter") { obdManager.connect(to: peripheral) } } }
+                    else { Button("Scan for OBD-II adapter") { obdManager.startScanning() }; ForEach(obdManager.discoveredAdapters, id: \.identifier) { peripheral in Button(peripheral.name ?? "OBD-II adapter") { obdManager.connect(to: peripheral) } }
+                    }
                     Button("Manage vehicle profiles") { showVehicleSettings = true }
                 } label: { Image(systemName: "ellipsis.circle").font(.title3).foregroundStyle(.mint) }.accessibilityLabel("OBD and vehicle profile settings")
             }
+            Toggle("OBD scanner", isOn: Binding(get: { obdManager.isEnabled }, set: { obdManager.setEnabled($0) }))
+                .tint(.mint)
+                .padding(.vertical, 4)
             HStack(alignment: .firstTextBaseline, spacing: 24) {
                 VStack(alignment: .leading) { Text("Fuel level").font(.caption).foregroundStyle(.secondary); Text(obdManager.fuelLevelPercentage.map { String(format: "%.0f%%", $0) } ?? "—").font(.title2.bold()) }
                 VStack(alignment: .leading) { Text("Estimated range").font(.caption).foregroundStyle(.secondary); Text(rangeAdvisor.estimatedRangeKm(fuelLevelPercentage: obdManager.fuelLevelPercentage).map { String(format: "%.0f km", $0) } ?? "—").font(.title2.bold()).foregroundStyle(.mint) }
@@ -80,7 +84,7 @@ struct ContentView: View {
             Text(rangeRecommendation.text).font(.subheadline).foregroundStyle(rangeRecommendation.isLowFuel ? .orange : .white).fixedSize(horizontal: false, vertical: true)
             if obdManager.isVehicleRunning { Button("Refresh fuel level") { obdManager.requestFuelLevel() }.font(.caption.bold()).tint(.mint) }
             if !obdManager.isConnected { adapterRecommendation }
-        }.padding(14).frame(maxWidth: .infinity, alignment: .leading).background(Color(white: 0.09), in: RoundedRectangle(cornerRadius: 16))
+        }.padding(14).frame(maxWidth: .infinity, alignment: .leading).background(Color.black, in: RoundedRectangle(cornerRadius: 16))
     }
 
     private var adapterRecommendation: some View {
@@ -88,7 +92,7 @@ struct ContentView: View {
             Text("Don't have an OBD-II adapter? Get a compatible Bluetooth scanner to unlock live fuel levels and smart range alerts.").font(.caption).fixedSize(horizontal: false, vertical: true)
             Link(destination: URL(string: "https://link.amazon/B048kUETy")!) { Label("Shop Veepeak OBDCheck BLE on Amazon AU", systemImage: "arrow.up.right.square").font(.caption.bold()) }.tint(.mint)
             Text("As an Amazon Associate, Dave may earn from qualifying purchases.").font(.caption2).foregroundStyle(.secondary)
-        }.padding(10).frame(maxWidth: .infinity, alignment: .leading).background(Color(white: 0.13), in: RoundedRectangle(cornerRadius: 12))
+        }.padding(10).frame(maxWidth: .infinity, alignment: .leading).background(Color.black, in: RoundedRectangle(cornerRadius: 12))
     }
 }
 
@@ -163,24 +167,24 @@ private final class FuelLocationManager: NSObject, ObservableObject, CLLocationM
 }
 
 enum StationRadius: String, CaseIterable, Identifiable {
-    case fiveKm, tenKm, twentyFiveKm, fiftyKm
+    case fiveKm, tenKm, twentyFiveKm, fiftyKm, oneHundredKm, twoHundredFiftyKm, fiveHundredKm
     var id: String { rawValue }
-    var title: String { switch self { case .fiveKm: "5 km"; case .tenKm: "10 km"; case .twentyFiveKm: "25 km"; case .fiftyKm: "50 km" } }
-    var kilometers: Double { switch self { case .fiveKm: 5; case .tenKm: 10; case .twentyFiveKm: 25; case .fiftyKm: 50 } }
+    var title: String { switch self { case .fiveKm: "5 km"; case .tenKm: "10 km"; case .twentyFiveKm: "25 km"; case .fiftyKm: "50 km"; case .oneHundredKm: "100 km"; case .twoHundredFiftyKm: "250 km"; case .fiveHundredKm: "500 km" } }
+    var kilometers: Double { switch self { case .fiveKm: 5; case .tenKm: 10; case .twentyFiveKm: 25; case .fiftyKm: 50; case .oneHundredKm: 100; case .twoHundredFiftyKm: 250; case .fiveHundredKm: 500 } }
 }
 
 private struct StationRow: View {
     let station: FuelStation
     let fuel: FuelType
     var body: some View {
-        HStack(spacing: 14) { Image(systemName: "fuelpump.fill").foregroundStyle(.mint).font(.title2); VStack(alignment: .leading, spacing: 5) { Text(station.name).font(.headline).foregroundStyle(.white); Text(station.address).font(.caption).foregroundStyle(.secondary); Text("\(station.distanceKm, specifier: "%.1f") km · \(station.amenities.joined(separator: " · "))").font(.caption2).foregroundStyle(.secondary) }; Spacer(); Text(station.prices[fuel].map { String(format: "%.1f¢", $0) } ?? "—").font(.title3.bold()).foregroundStyle(.mint) }.listRowBackground(Color(white: 0.07)).padding(.vertical, 5).contentShape(Rectangle())
+        HStack(spacing: 14) { Image(systemName: "fuelpump.fill").foregroundStyle(.mint).font(.title2); VStack(alignment: .leading, spacing: 5) { Text(station.name).font(.headline).foregroundStyle(.white); Text(station.address).font(.caption).foregroundStyle(.secondary); Text("\(station.distanceKm, specifier: "%.1f") km · \(station.amenities.joined(separator: " · "))").font(.caption2).foregroundStyle(.secondary) }; Spacer(); Text(station.prices[fuel].map { String(format: "%.1f¢", $0) } ?? "—").font(.title3.bold()).foregroundStyle(.mint) }.listRowBackground(Color.black).padding(.vertical, 5).contentShape(Rectangle())
     }
 }
 
 private struct FuelStationDetailView: View {
     let station: FuelStation
     @Environment(\.dismiss) private var dismiss
-    private var orderedPrices: [(fuel: FuelType, price: Double)] { FuelType.allCases.compactMap { fuel in station.prices[fuel].map { (fuel, $0) } }
+    private var orderedPrices: [(fuel: FuelType, price: Double)] { FuelType.allCases.compactMap { fuel in station.prices[fuel].map { (fuel, $0) } } }
     var body: some View {
         NavigationStack {
             List { Section(station.name) { Text(station.address); Text(String(format: "%.1f km away", station.distanceKm)); ForEach(orderedPrices, id: \.fuel) { entry in HStack { Text(entry.fuel.rawValue); Spacer(); Text(String(format: "%.1f¢/L", entry.price)).foregroundStyle(.mint) } } }; Section("Amenities") { ForEach(station.amenities, id: \.self) { Text($0) } }; Section { Button("Open in Apple Maps") { let item = MKMapItem(placemark: MKPlacemark(coordinate: station.coordinate.location)); item.name = station.name; item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving]) } } }.navigationTitle("Station details").toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() }.tint(.mint) } }
