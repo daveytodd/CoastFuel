@@ -39,7 +39,10 @@ final class OBDManager: NSObject, ObservableObject {
         discoveredAdapters.removeAll()
         connectionState = .scanning
         isScanning = true
+        // Scan without a service filter: many BLE adapters advertise proprietary,
+        // changing, or no service UUIDs. Candidate selection happens in didDiscover.
         central.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
+        log("Scanning for nearby OBD-II adapters…")
     }
 
     func stopScanning() {
@@ -140,11 +143,20 @@ extension OBDManager: CBCentralManagerDelegate {
         else if central.state == .poweredOff || central.state == .unauthorized || central.state == .unsupported { connectionState = .failed; isConnected = false; isVehicleRunning = false }
     }
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
-        let name = (advertisementData[CBAdvertisementDataLocalNameKey] as? String) ?? peripheral.name ?? ""
+        let advertisedName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
+        let name = (advertisedName ?? peripheral.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedName = name.uppercased()
         let services = (advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? []).map { $0.uuidString.uppercased() }
-        let isCandidate = name.localizedCaseInsensitiveContains("OBD") || name.localizedCaseInsensitiveContains("V-LINK") || name.localizedCaseInsensitiveContains("VLINK") || services.contains { knownServiceUUIDs.contains($0) }
-        guard isCandidate else { return }
-        if !discoveredAdapters.contains(where: { $0.identifier == peripheral.identifier }) { discoveredAdapters.append(peripheral) }
+        let namePatterns = ["OBD", "VEEPEAK", "V-LINK", "VLINK", "VIECAR", "KONNWEI", "ELM327", "OBDCHECK", "IOS-VLINK"]
+        let isCandidate = namePatterns.contains(where: { normalizedName.contains($0) }) || services.contains { knownServiceUUIDs.contains($0) }
+
+        // If a device has no recognizable name or advertised service, retain it
+        // in the scan results too, so adapters with opaque BLE names aren't hidden.
+        if !isCandidate && !name.isEmpty { return }
+        if !discoveredAdapters.contains(where: { $0.identifier == peripheral.identifier }) {
+            discoveredAdapters.append(peripheral)
+            log("Found BLE device: \(name.isEmpty ? "Unnamed device" : name) (RSSI \(RSSI))")
+        }
         if let saved = UserDefaults.standard.string(forKey: savedPeripheralKey), saved == peripheral.identifier.uuidString { connect(to: peripheral) }
     }
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
