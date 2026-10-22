@@ -1,6 +1,6 @@
 import Foundation
 
-/// Estimates remaining driving range and recommends affordable stations using the vehicle's profile.
+/// Estimates remaining driving range and recommends affordable stations using the selected vehicle profile.
 struct FuelRangeAdvisor {
     var tankCapacityLitres: Double = 51
     var averageConsumptionLitresPer100Km: Double = 7
@@ -22,7 +22,10 @@ struct FuelRangeAdvisor {
     func recommendation(fuelLevelPercentage: Double?, stations: [FuelStation], fuel: FuelType) -> Recommendation {
         let range = estimatedRangeKm(fuelLevelPercentage: fuelLevelPercentage)
         let low = (fuelLevelPercentage ?? 100) <= lowFuelThresholdPercent
-        let reachable = stations.filter { range.map { $0 >= $1.distanceKm } ?? false }
+        let reachable = stations.filter { station in
+            guard let range else { return false }
+            return station.distanceKm <= range
+        }
         let cheapest = reachable.compactMap { station -> (FuelStation, Double)? in
             guard let price = station.prices[fuel] else { return nil }
             return (station, price)
