@@ -9,6 +9,7 @@ struct VehicleProfile: Identifiable, Codable, Equatable {
     var averageConsumptionLitresPer100Km: Double
     var obdAdapterUUID: String?
     var licensePlate: String? = nil
+    var preferredFuelType: String = FuelType.unleaded91.rawValue
 
     static let defaultProfile = VehicleProfile(
         name: "My Car",
@@ -16,14 +17,15 @@ struct VehicleProfile: Identifiable, Codable, Equatable {
         tankCapacityLitres: 51,
         averageConsumptionLitresPer100Km: 7,
         obdAdapterUUID: nil,
-        licensePlate: nil
+        licensePlate: nil,
+        preferredFuelType: FuelType.unleaded91.rawValue
     )
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, fuelType, tankCapacityLitres, averageConsumptionLitresPer100Km, obdAdapterUUID, licensePlate
+        case id, name, fuelType, tankCapacityLitres, averageConsumptionLitresPer100Km, obdAdapterUUID, licensePlate, preferredFuelType
     }
 
-    init(id: UUID = UUID(), name: String, fuelType: FuelType, tankCapacityLitres: Double, averageConsumptionLitresPer100Km: Double, obdAdapterUUID: String?, licensePlate: String? = nil) {
+    init(id: UUID = UUID(), name: String, fuelType: FuelType, tankCapacityLitres: Double, averageConsumptionLitresPer100Km: Double, obdAdapterUUID: String?, licensePlate: String? = nil, preferredFuelType: String = FuelType.unleaded91.rawValue) {
         self.id = id
         self.name = name
         self.fuelType = fuelType
@@ -31,6 +33,7 @@ struct VehicleProfile: Identifiable, Codable, Equatable {
         self.averageConsumptionLitresPer100Km = averageConsumptionLitresPer100Km
         self.obdAdapterUUID = obdAdapterUUID
         self.licensePlate = licensePlate
+        self.preferredFuelType = preferredFuelType
     }
 
     init(from decoder: Decoder) throws {
@@ -42,6 +45,7 @@ struct VehicleProfile: Identifiable, Codable, Equatable {
         averageConsumptionLitresPer100Km = try container.decode(Double.self, forKey: .averageConsumptionLitresPer100Km)
         obdAdapterUUID = try container.decodeIfPresent(String.self, forKey: .obdAdapterUUID)
         licensePlate = try container.decodeIfPresent(String.self, forKey: .licensePlate)
+        preferredFuelType = try container.decodeIfPresent(String.self, forKey: .preferredFuelType) ?? FuelType.unleaded91.rawValue
     }
 }
 
