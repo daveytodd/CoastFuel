@@ -98,10 +98,11 @@ private struct VehicleProfilesView: View {
                     Button { isCreating = true } label: { Label("Add vehicle profile", systemImage: "plus") }
                 }
             }
+            .scrollContentBackground(.hidden).background(Color.black)
             .navigationTitle("Vehicle profiles").toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
             .sheet(isPresented: $isCreating) { VehicleProfileEditor(profile: nil, onSave: store.add) }
             .sheet(item: $editingProfile) { profile in VehicleProfileEditor(profile: profile, onSave: store.update) }
-        }
+        }.preferredColorScheme(.dark)
     }
 }
 
@@ -119,14 +120,22 @@ private struct VehicleProfileEditor: View {
     var body: some View {
         NavigationStack {
             Form { Section("Vehicle details") {
-                TextField("Vehicle name", text: $name)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Vehicle name").font(.caption).foregroundStyle(.secondary)
+                    TextField("e.g. Dave’s Mazda 3", text: $name).textInputAutocapitalization(.words).autocorrectionDisabled().submitLabel(.done)
+                        .accessibilityLabel("Vehicle nickname")
+                }.padding(.vertical, 4)
                 Picker("Fuel type", selection: $fuelType) { ForEach(FuelType.allCases) { fuel in Text(fuel.rawValue).tag(fuel) } }
                 HStack { Text("Tank capacity"); Spacer(); TextField("Litres", value: $tankCapacity, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing); Text("L") }
                 HStack { Text("Fuel economy"); Spacer(); TextField("L/100 km", value: $consumption, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing); Text("L/100 km") }
-            } }
+            } }.scrollContentBackground(.hidden).background(Color.black)
             .navigationTitle(existing == nil ? "Add Vehicle" : "Edit Vehicle")
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("Save") { let profile = VehicleProfile(id: existing?.id ?? UUID(), name: name.trimmingCharacters(in: .whitespacesAndNewlines), fuelType: fuelType, tankCapacityLitres: tankCapacity, averageConsumptionLitresPer100Km: consumption, obdAdapterUUID: existing?.obdAdapterUUID); onSave(profile); dismiss() }.disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || tankCapacity <= 0 || consumption <= 0) } }
-        }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("Save") {
+                let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                let profile = VehicleProfile(id: existing?.id ?? UUID(), name: trimmedName, fuelType: fuelType, tankCapacityLitres: tankCapacity, averageConsumptionLitresPer100Km: consumption, obdAdapterUUID: existing?.obdAdapterUUID)
+                onSave(profile); dismiss()
+            }.disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || tankCapacity <= 0 || consumption <= 0) } }
+        }.preferredColorScheme(.dark)
     }
 }
 
