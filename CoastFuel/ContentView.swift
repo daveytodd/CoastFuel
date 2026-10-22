@@ -35,12 +35,24 @@ struct ContentView: View {
                     Map { ForEach(stations) { station in Annotation(station.name, coordinate: station.coordinate.location) { Button { selectedStation = station } label: { Text(station.prices[selectedFuel].map { String(format: "%.1f¢", $0) } ?? "—").font(.caption.bold()).padding(7).background(.mint, in: Circle()).foregroundStyle(.black) }.buttonStyle(.plain) } } }.mapStyle(.standard(elevation: .realistic)).clipShape(RoundedRectangle(cornerRadius: 18)).padding()
                 } else { List(stations) { station in Button { selectedStation = station } label: { StationRow(station: station, fuel: selectedFuel) }.buttonStyle(.plain) }.listStyle(.plain) }
             }
-            .background(Color.black).navigationTitle("CoastFuel").task { await service.load(); locationManager.onLocationUpdate = { location in service.setUserLocation(location) }; locationManager.requestCurrentLocation() }
+            .background(Color.black)
+            .navigationTitle("CoastFuel")
+            .onAppear { syncFuelTypeWithActiveVehicle() }
+            .onChange(of: profileStore.activeProfileID) { _, _ in syncFuelTypeWithActiveVehicle() }
+            .task { await service.load(); locationManager.onLocationUpdate = { location in service.setUserLocation(location) }; locationManager.requestCurrentLocation() }
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { locationManager.requestCurrentLocation() } label: { Image(systemName: "location.fill") }.tint(.mint).accessibilityLabel("Refresh stations from current location") } }
         }
         .sheet(item: $selectedStation) { station in FuelStationDetailView(station: station) }
         .sheet(isPresented: $showVehicleSettings) { VehicleProfilesView(store: profileStore) }
         .preferredColorScheme(.dark)
+    }
+
+    private func syncFuelTypeWithActiveVehicle() {
+        guard let preferredFuel = FuelType(rawValue: profileStore.activeProfile.preferredFuelType) else {
+            selectedFuel = profileStore.activeProfile.fuelType
+            return
+        }
+        selectedFuel = preferredFuel
     }
 
     private var vehicleRangeCard: some View {
@@ -168,7 +180,7 @@ private struct StationRow: View {
 private struct FuelStationDetailView: View {
     let station: FuelStation
     @Environment(\.dismiss) private var dismiss
-    private var orderedPrices: [(fuel: FuelType, price: Double)] { FuelType.allCases.compactMap { fuel in station.prices[fuel].map { (fuel, $0) } } }
+    private var orderedPrices: [(fuel: FuelType, price: Double)] { FuelType.allCases.compactMap { fuel in station.prices[fuel].map { (fuel, $0) } }
     var body: some View {
         NavigationStack {
             List { Section(station.name) { Text(station.address); Text(String(format: "%.1f km away", station.distanceKm)); ForEach(orderedPrices, id: \.fuel) { entry in HStack { Text(entry.fuel.rawValue); Spacer(); Text(String(format: "%.1f¢/L", entry.price)).foregroundStyle(.mint) } } }; Section("Amenities") { ForEach(station.amenities, id: \.self) { Text($0) } }; Section { Button("Open in Apple Maps") { let item = MKMapItem(placemark: MKPlacemark(coordinate: station.coordinate.location)); item.name = station.name; item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving]) } } }.navigationTitle("Station details").toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() }.tint(.mint) } }
