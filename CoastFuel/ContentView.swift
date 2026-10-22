@@ -6,8 +6,7 @@ struct ContentView: View {
     @StateObject private var service = FuelDataService()
     @StateObject private var locationManager = FuelLocationManager()
     @StateObject private var obdManager = OBDManager()
-    @AppStorage("CoastFuel.tankCapacityLitres") private var tankCapacityLitres = 51.0
-    @AppStorage("CoastFuel.averageConsumptionLitresPer100Km") private var averageConsumption = 7.0
+    @StateObject private var profileStore = VehicleProfileStore()
     @State private var selectedFuel: FuelType = .unleaded91
     @State private var selectedRadius: StationRadius = .tenKm
     @State private var showMap = false
@@ -18,11 +17,9 @@ struct ContentView: View {
     private var stations: [FuelStation] {
         service.stations.filter { $0.distanceKm <= selectedRadius.kilometers }.sorted { $0.distanceKm < $1.distanceKm }
     }
-    private var rangeAdvisor: FuelRangeAdvisor {
-        FuelRangeAdvisor(tankCapacityLitres: tankCapacityLitres, averageConsumptionLitresPer100Km: averageConsumption)
-    }
+    private var rangeAdvisor: FuelRangeAdvisor { FuelRangeAdvisor(profile: profileStore.activeProfile) }
     private var rangeRecommendation: FuelRangeAdvisor.Recommendation {
-        rangeAdvisor.recommendation(fuelLevelPercentage: obdManager.fuelLevelPercentage, stations: service.stations, fuel: selectedFuel)
+        rangeAdvisor.recommendation(fuelLevelPercentage: obdManager.fuelLevelPercentage, stations: service.stations)
     }
 
     var body: some View {
@@ -66,14 +63,18 @@ struct ContentView: View {
             }
         }
         .sheet(item: $selectedStation) { station in FuelStationDetailView(station: station) }
-        .sheet(isPresented: $showVehicleSettings) { vehicleSettings }
+        .sheet(isPresented: $showVehicleSettings) { VehicleProfilesView(store: profileStore) }
         .preferredColorScheme(.dark)
     }
 
     private var vehicleRangeCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label("Vehicle fuel range", systemImage: "fuelpump.fill").font(.headline)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(profileStore.activeProfile.name).font(.headline)
+                    Text("\(profileStore.activeProfile.fuelType.rawValue) · \(profileStore.activeProfile.tankCapacityLitres, specifier: "%.1f") L tank · \(profileStore.activeProfile.averageConsumptionLitresPer100Km, specifier: "%.1f") L/100 km")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
                 Spacer()
                 Circle().fill(obdManager.isVehicleRunning ? .green : (obdManager.isConnected ? .orange : .gray)).frame(width: 9, height: 9)
                 Text(obdManager.isVehicleRunning ? "Engine Running" : (obdManager.isConnected ? "Engine Off" : "Disconnected"))
@@ -86,9 +87,9 @@ struct ContentView: View {
                             Button(peripheral.name ?? "OBD-II adapter") { obdManager.connect(to: peripheral) }
                         }
                     }
-                    Button("Vehicle profile settings") { showVehicleSettings = true }
+                    Button("Manage vehicle profiles") { showVehicleSettings = true }
                 } label: { Image(systemName: "ellipsis.circle").font(.title3).foregroundStyle(.mint) }
-                .accessibilityLabel("OBD and vehicle settings")
+                .accessibilityLabel("OBD and vehicle profile settings")
             }
             HStack(alignment: .firstTextBaseline, spacing: 24) {
                 VStack(alignment: .leading) {
@@ -99,27 +100,106 @@ struct ContentView: View {
                     Text("Estimated range").font(.caption).foregroundStyle(.secondary)
                     Text(rangeAdvisor.estimatedRangeKm(fuelLevelPercentage: obdManager.fuelLevelPercentage).map { String(format: "%.0f km", $0) } ?? "—").font(.title2.bold()).foregroundStyle(.mint)
                 }
+                Spacer()
+                Menu("Switch") {
+                    ForEach(profileStore.profiles) { profile in
+                        Button { profileStore.select(profile.id) } label: {
+                            if profile.id == profileStore.activeProfileID { Label(profile.name, systemImage: "checkmark") } else { Text(profile.name) }
+                        }
+                    }
+                    Button("Add or edit profiles…") { showVehicleSettings = true }
+                }.font(.caption).tint(.mint)
             }
             Text(rangeRecommendation.text).font(.subheadline).foregroundStyle(rangeRecommendation.isLowFuel ? .orange : .white).fixedSize(horizontal: false, vertical: true)
-            Text(String(format: "Vehicle profile: %.0f L tank · %.1f L/100 km", tankCapacityLitres, averageConsumption)).font(.caption2).foregroundStyle(.secondary)
             if obdManager.isVehicleRunning { Button("Refresh fuel level") { obdManager.requestFuelLevel() }.font(.caption.bold()).tint(.mint) }
         }
         .padding(14).frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(white: 0.09), in: RoundedRectangle(cornerRadius: 16))
     }
+}
 
-    private var vehicleSettings: some View {
+private struct VehicleProfilesView: View {
+    @ObservedObject var store: VehicleProfileStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var editingProfile: VehicleProfile?
+    @State private var isCreating = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Active vehicle") {
+                    Picker("Select profile", selection: Binding(get: { store.activeProfileID }, set: { store.select($0) })) {
+                        ForEach(store.profiles) { profile in Text(profile.name).tag(profile.id) }
+                    }
+                    Text("\(store.activeProfile.fuelType.rawValue) · \(store.activeProfile.tankCapacityLitres, specifier: "%.1f") L · \(store.activeProfile.averageConsumptionLitresPer100Km, specifier: "%.1f") L/100 km")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Section("Saved profiles") {
+                    ForEach(store.profiles) { profile in
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(profile.name)
+                                Text("\(profile.fuelType.rawValue) · \(profile.tankCapacityLitres, specifier: "%.1f") L · \(profile.averageConsumptionLitresPer100Km, specifier: "%.1f") L/100 km")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Edit") { editingProfile = profile }.buttonStyle(.borderless)
+                        }
+                    }
+                    .onDelete { offsets in
+                        let ids = offsets.map { store.profiles[$0].id }
+                        ids.forEach { store.delete($0) }
+                    }
+                    Button { isCreating = true } label: { Label("Add vehicle profile", systemImage: "plus") }
+                }
+            }
+            .navigationTitle("Vehicle profiles")
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+            .sheet(isPresented: $isCreating) { VehicleProfileEditor(profile: nil, onSave: store.add) }
+            .sheet(item: $editingProfile) { profile in VehicleProfileEditor(profile: profile, onSave: store.update) }
+        }
+    }
+}
+
+private struct VehicleProfileEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var name: String
+    @State private var fuelType: FuelType
+    @State private var tankCapacity: Double
+    @State private var consumption: Double
+    private let existing: VehicleProfile?
+    private let onSave: (VehicleProfile) -> Void
+
+    init(profile: VehicleProfile?, onSave: @escaping (VehicleProfile) -> Void) {
+        existing = profile
+        self.onSave = onSave
+        _name = State(initialValue: profile?.name ?? "My Car")
+        _fuelType = State(initialValue: profile?.fuelType ?? .unleaded91)
+        _tankCapacity = State(initialValue: profile?.tankCapacityLitres ?? 51)
+        _consumption = State(initialValue: profile?.averageConsumptionLitresPer100Km ?? 7)
+    }
+
+    var body: some View {
         NavigationStack {
             Form {
-                Section("Vehicle profile") {
-                    HStack { Text("Tank capacity"); Spacer(); TextField("Litres", value: $tankCapacityLitres, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing); Text("L") }
-                    HStack { Text("Average consumption"); Spacer(); TextField("L/100 km", value: $averageConsumption, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing); Text("L/100 km") }
+                Section("Vehicle details") {
+                    TextField("Vehicle name", text: $name)
+                    Picker("Fuel type", selection: $fuelType) { ForEach(FuelType.allCases) { fuel in Text(fuel.rawValue).tag(fuel) } }
+                    HStack { Text("Tank capacity"); Spacer(); TextField("Litres", value: $tankCapacity, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing); Text("L") }
+                    HStack { Text("Fuel economy"); Spacer(); TextField("L/100 km", value: $consumption, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing); Text("L/100 km") }
                 }
-                Section { Text("These settings are saved on this device and used to estimate range for the connected car.").font(.footnote).foregroundStyle(.secondary) }
             }
-            .navigationTitle("Vehicle profile")
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { showVehicleSettings = false }.tint(.mint) } }
-            .preferredColorScheme(.dark)
+            .navigationTitle(existing == nil ? "Add Vehicle" : "Edit Vehicle")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        let profile = VehicleProfile(id: existing?.id ?? UUID(), name: name.trimmingCharacters(in: .whitespacesAndNewlines), fuelType: fuelType, tankCapacityLitres: tankCapacity, averageConsumptionLitresPer100Km: consumption, obdAdapterUUID: existing?.obdAdapterUUID)
+                        onSave(profile)
+                        dismiss()
+                    }.disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || tankCapacity <= 0 || consumption <= 0)
+                }
+            }
         }
     }
 }
@@ -171,7 +251,7 @@ private struct StationRow: View {
 private struct FuelStationDetailView: View {
     let station: FuelStation
     @Environment(\.dismiss) private var dismiss
-    private var orderedPrices: [(fuel: FuelType, price: Double)] { FuelType.allCases.compactMap { fuel in station.prices[fuel].map { (fuel, $0) } }
+    private var orderedPrices: [(fuel: FuelType, price: Double)] { FuelType.allCases.compactMap { fuel in station.prices[fuel].map { (fuel, $0) } } }
     var body: some View {
         NavigationStack {
             List {

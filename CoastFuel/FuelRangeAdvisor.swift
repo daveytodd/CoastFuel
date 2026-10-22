@@ -1,9 +1,8 @@
 import Foundation
 
-/// Estimates remaining driving range and recommends affordable stations using the selected vehicle profile.
+/// Estimates remaining range and recommends affordable stations for a vehicle profile.
 struct FuelRangeAdvisor {
-    var tankCapacityLitres: Double = 51
-    var averageConsumptionLitresPer100Km: Double = 7
+    let profile: VehicleProfile
     var lowFuelThresholdPercent: Double = 15
 
     struct Recommendation {
@@ -13,13 +12,14 @@ struct FuelRangeAdvisor {
     }
 
     func estimatedRangeKm(fuelLevelPercentage: Double?) -> Double? {
-        guard let percent = fuelLevelPercentage, tankCapacityLitres > 0,
-              averageConsumptionLitresPer100Km > 0 else { return nil }
-        return tankCapacityLitres * min(max(percent, 0), 100) / 100
-            / averageConsumptionLitresPer100Km * 100
+        guard let percent = fuelLevelPercentage,
+              profile.tankCapacityLitres > 0,
+              profile.averageConsumptionLitresPer100Km > 0 else { return nil }
+        return profile.tankCapacityLitres * min(max(percent, 0), 100) / 100
+            / profile.averageConsumptionLitresPer100Km * 100
     }
 
-    func recommendation(fuelLevelPercentage: Double?, stations: [FuelStation], fuel: FuelType) -> Recommendation {
+    func recommendation(fuelLevelPercentage: Double?, stations: [FuelStation]) -> Recommendation {
         let range = estimatedRangeKm(fuelLevelPercentage: fuelLevelPercentage)
         let low = (fuelLevelPercentage ?? 100) <= lowFuelThresholdPercent
         let reachable = stations.filter { station in
@@ -27,7 +27,7 @@ struct FuelRangeAdvisor {
             return station.distanceKm <= range
         }
         let cheapest = reachable.compactMap { station -> (FuelStation, Double)? in
-            guard let price = station.prices[fuel] else { return nil }
+            guard let price = station.prices[profile.fuelType] else { return nil }
             return (station, price)
         }.min { $0.1 < $1.1 }?.0
         let text: String
@@ -37,7 +37,7 @@ struct FuelRangeAdvisor {
         } else if low {
             text = "Low fuel warning — refuel soon."
         } else if let cheapest {
-            text = String(format: "Cheapest fuel within range: %@ in %.1f km", cheapest.name, cheapest.distanceKm)
+            text = String(format: "Cheapest %@ fuel within range: %@ in %.1f km", profile.fuelType.rawValue, cheapest.name, cheapest.distanceKm)
         } else if range != nil {
             text = "Good on fuel — no priced station found within estimated range."
         } else {
