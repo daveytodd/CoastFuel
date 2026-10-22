@@ -20,11 +20,16 @@ final class VehicleProfileStore: ObservableObject {
     var activeProfile: VehicleProfile { profiles.first(where: { $0.id == activeProfileID }) ?? profiles[0] }
 
     init(defaults: UserDefaults = .standard) {
-        let decoded = defaults.data(forKey: profilesKey).flatMap { try? JSONDecoder().decode([VehicleProfile].self, from: $0) }
-        profiles = (decoded?.isEmpty == false) ? decoded! : [.defaultProfile]
-        if let text = defaults.string(forKey: activeKey), let id = UUID(uuidString: text), profiles.contains(where: { $0.id == id }) { activeProfileID = id }
-        else { activeProfileID = profiles[0].id }
-        persist(defaults)
+        let key = "CoastFuel.vehicleProfiles"
+        let activeKey = "CoastFuel.activeVehicleProfileID"
+        let decoded = defaults.data(forKey: key).flatMap { try? JSONDecoder().decode([VehicleProfile].self, from: $0) }
+        let loadedProfiles = (decoded?.isEmpty == false) ? decoded! : [.defaultProfile]
+        let savedID = defaults.string(forKey: activeKey).flatMap(UUID.init(uuidString:))
+        let loadedActiveID = savedID.flatMap { id in loadedProfiles.contains(where: { $0.id == id }) ? id : nil } ?? loadedProfiles[0].id
+        self.profiles = loadedProfiles
+        self.activeProfileID = loadedActiveID
+        if let data = try? JSONEncoder().encode(loadedProfiles) { defaults.set(data, forKey: key) }
+        defaults.set(loadedActiveID.uuidString, forKey: activeKey)
     }
     func select(_ id: UUID) { guard profiles.contains(where: { $0.id == id }) else { return }; activeProfileID = id; persist() }
     func add(_ profile: VehicleProfile) { profiles.append(profile); activeProfileID = profile.id; persist() }
