@@ -8,14 +8,41 @@ struct VehicleProfile: Identifiable, Codable, Equatable {
     var tankCapacityLitres: Double
     var averageConsumptionLitresPer100Km: Double
     var obdAdapterUUID: String?
+    var licensePlate: String? = nil
 
     static let defaultProfile = VehicleProfile(
         name: "My Car",
         fuelType: .unleaded91,
         tankCapacityLitres: 51,
         averageConsumptionLitresPer100Km: 7,
-        obdAdapterUUID: nil
+        obdAdapterUUID: nil,
+        licensePlate: nil
     )
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, fuelType, tankCapacityLitres, averageConsumptionLitresPer100Km, obdAdapterUUID, licensePlate
+    }
+
+    init(id: UUID = UUID(), name: String, fuelType: FuelType, tankCapacityLitres: Double, averageConsumptionLitresPer100Km: Double, obdAdapterUUID: String?, licensePlate: String? = nil) {
+        self.id = id
+        self.name = name
+        self.fuelType = fuelType
+        self.tankCapacityLitres = tankCapacityLitres
+        self.averageConsumptionLitresPer100Km = averageConsumptionLitresPer100Km
+        self.obdAdapterUUID = obdAdapterUUID
+        self.licensePlate = licensePlate
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try container.decode(String.self, forKey: .name)
+        fuelType = try container.decode(FuelType.self, forKey: .fuelType)
+        tankCapacityLitres = try container.decode(Double.self, forKey: .tankCapacityLitres)
+        averageConsumptionLitresPer100Km = try container.decode(Double.self, forKey: .averageConsumptionLitresPer100Km)
+        obdAdapterUUID = try container.decodeIfPresent(String.self, forKey: .obdAdapterUUID)
+        licensePlate = try container.decodeIfPresent(String.self, forKey: .licensePlate)
+    }
 }
 
 @MainActor
