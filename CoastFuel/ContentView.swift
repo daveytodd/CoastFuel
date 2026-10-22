@@ -23,7 +23,7 @@ struct ContentView: View {
         TabView {
             NavigationStack {
                 ScrollView {
-                    LazyVStack(spacing: 12) {
+                    LazyVStack(spacing: showMap ? 18 : 12) {
                         vehicleRangeCard.padding(.horizontal)
                         HStack {
                             Picker("State", selection: $service.selectedState) { ForEach(AustralianState.allCases) { state in Text(state.rawValue).tag(state) } }.pickerStyle(.menu).tint(.mint).onChange(of: service.selectedState) { _, _ in service.refreshStations() }
@@ -35,7 +35,13 @@ struct ContentView: View {
                         Toggle(isOn: $showMap) { Label(showMap ? "Map" : "Stations", systemImage: showMap ? "map" : "list.bullet") }.padding(.horizontal)
                         Toggle("Price alerts", isOn: $alertsEnabled).tint(.mint).padding(.horizontal)
                         if showMap {
-                            Map { ForEach(stations) { station in Annotation(station.name, coordinate: station.coordinate.location) { Button { selectedStation = station } label: { Text(station.prices[selectedFuel].map { String(format: "%.1f¢", $0) } ?? "—").font(.caption.bold()).padding(7).background(.mint, in: Circle()).foregroundStyle(.black) }.buttonStyle(.plain) } } }.mapStyle(.standard(elevation: .realistic)).clipShape(RoundedRectangle(cornerRadius: 18)).padding()
+                            Map { ForEach(stations) { station in Annotation(station.name, coordinate: station.coordinate.location) { Button { selectedStation = station } label: { Text(station.prices[selectedFuel].map { String(format: "%.1f¢", $0) } ?? "—").font(.caption.bold()).padding(7).background(.mint, in: Circle()).foregroundStyle(.black) }.buttonStyle(.plain) } } }
+                                .mapStyle(.standard(elevation: .realistic))
+                                .frame(height: 300)
+                                .clipShape(RoundedRectangle(cornerRadius: 20))
+                                .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.primary.opacity(0.08), lineWidth: 1))
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 4)
                         } else {
                             LazyVStack(spacing: 0) {
                                 ForEach(stations) { station in
@@ -44,7 +50,7 @@ struct ContentView: View {
                             }
                         }
                     }
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 12)
                 }
                 .background(Color(uiColor: .systemBackground))
                 .navigationTitle("CoastFuel")
