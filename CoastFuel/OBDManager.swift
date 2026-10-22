@@ -6,6 +6,7 @@ import Foundation
 final class OBDManager: NSObject, ObservableObject {
     enum ConnectionState { case idle, scanning, connecting, discovering, initializing, ready, failed }
 
+    @Published private(set) var isEnabled = UserDefaults.standard.object(forKey: "CoastFuel.obdScannerEnabled") as? Bool ?? true
     @Published private(set) var isConnected = false
     @Published private(set) var isVehicleRunning = false
     @Published private(set) var connectionState: ConnectionState = .idle
@@ -16,6 +17,7 @@ final class OBDManager: NSObject, ObservableObject {
     @Published private(set) var diagnosticLogs: [String] = []
 
     private let savedPeripheralKey = "CoastFuel.savedOBDPeripheralUUID"
+    private let enabledKey = "CoastFuel.obdScannerEnabled"
     private var central: CBCentralManager!
     private var connectedPeripheral: CBPeripheral?
     private var writeCharacteristic: CBCharacteristic?
@@ -34,15 +36,38 @@ final class OBDManager: NSObject, ObservableObject {
         central = CBCentralManager(delegate: self, queue: .main)
     }
 
+    func setEnabled(_ enabled: Bool) {
+        guard enabled != isEnabled else { return }
+        isEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: enabledKey)
+        if enabled {
+            log("OBD scanner enabled.")
+            if central.state == .poweredOn { resumeConnection() }
+        } else {
+            log("OBD scanner disabled.")
+            reconnectAttemptScheduled = false
+            stopScanning()
+            if let peripheral = connectedPeripheral { central.cancelPeripheralConnection(peripheral) }
+            clearConnection(state: .idle)
+        }
+    }
+
     func startScanning() {
+        guard isEnabled else { log("Enable the OBD scanner to scan."); return }
         guard central.state == .poweredOn else { log("Bluetooth is not ready."); return }
         discoveredAdapters.removeAll()
         connectionState = .scanning
         isScanning = true
-        // Scan without a service filter: many BLE adapters advertise proprietary,
-        // changing, or no service UUIDs. Candidate selection happens in didDiscover.
         central.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
         log("Scanning for nearby OBD-II adapters…")
+    }
+
+    private func resumeConnection() {
+        guard isEnabled, central.state == .poweredOn else { return }
+        if let id = UserDefaults.standard.string(forKey: savedPeripheralKey), let uuid = UUID(uuidString: id),
+           let peripheral = central.retrievePeripherals(withIdentifiers: [uuid]).first {
+            connect(to: peripheral)
+        } else { startScanning() }
     }
 
     func stopScanning() {
@@ -52,6 +77,7 @@ final class OBDManager: NSObject, ObservableObject {
     }
 
     func connect(to peripheral: CBPeripheral) {
+        guard isEnabled else { return }
         stopScanning()
         connectedPeripheral = peripheral
         peripheral.delegate = self
@@ -60,12 +86,14 @@ final class OBDManager: NSObject, ObservableObject {
     }
 
     func disconnect() {
+        reconnectAttemptScheduled = false
+        stopScanning()
         if let peripheral = connectedPeripheral { central.cancelPeripheralConnection(peripheral) }
         clearConnection(state: .idle)
     }
 
     func requestFuelLevel() {
-        guard isConnected, isVehicleRunning else { return }
+        guard isEnabled, isConnected, isVehicleRunning else { return }
         commandQueue.append("012F")
         sendNextCommandIfReady()
     }
@@ -118,12 +146,13 @@ final class OBDManager: NSObject, ObservableObject {
     }
 
     private func scheduleReconnect() {
-        guard !reconnectAttemptScheduled, let id = UserDefaults.standard.string(forKey: savedPeripheralKey), let uuid = UUID(uuidString: id) else { return }
+        guard isEnabled, !reconnectAttemptScheduled,
+              let id = UserDefaults.standard.string(forKey: savedPeripheralKey), let uuid = UUID(uuidString: id) else { return }
         reconnectAttemptScheduled = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
             guard let self else { return }
             self.reconnectAttemptScheduled = false
-            guard self.central.state == .poweredOn, !self.isConnected else { return }
+            guard self.isEnabled, self.central.state == .poweredOn, !self.isConnected else { return }
             let peripherals = self.central.retrievePeripherals(withIdentifiers: [uuid])
             if let peripheral = peripherals.first { self.connect(to: peripheral) }
             else { self.startScanning() }
@@ -139,19 +168,18 @@ final class OBDManager: NSObject, ObservableObject {
 
 extension OBDManager: CBCentralManagerDelegate {
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        if central.state == .poweredOn { scheduleReconnect() }
+        guard isEnabled else { return }
+        if central.state == .poweredOn { resumeConnection() }
         else if central.state == .poweredOff || central.state == .unauthorized || central.state == .unsupported { connectionState = .failed; isConnected = false; isVehicleRunning = false }
     }
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
+        guard isEnabled else { return }
         let advertisedName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
         let name = (advertisedName ?? peripheral.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedName = name.uppercased()
         let services = (advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? []).map { $0.uuidString.uppercased() }
         let namePatterns = ["OBD", "VEEPEAK", "V-LINK", "VLINK", "VIECAR", "KONNWEI", "ELM327", "OBDCHECK", "IOS-VLINK"]
         let isCandidate = namePatterns.contains(where: { normalizedName.contains($0) }) || services.contains { knownServiceUUIDs.contains($0) }
-
-        // If a device has no recognizable name or advertised service, retain it
-        // in the scan results too, so adapters with opaque BLE names aren't hidden.
         if !isCandidate && !name.isEmpty { return }
         if !discoveredAdapters.contains(where: { $0.identifier == peripheral.identifier }) {
             discoveredAdapters.append(peripheral)
@@ -160,6 +188,7 @@ extension OBDManager: CBCentralManagerDelegate {
         if let saved = UserDefaults.standard.string(forKey: savedPeripheralKey), saved == peripheral.identifier.uuidString { connect(to: peripheral) }
     }
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        guard isEnabled else { central.cancelPeripheralConnection(peripheral); return }
         connectedPeripheral = peripheral; peripheral.delegate = self; connectionState = .discovering
         peripheral.discoverServices(nil)
     }
@@ -175,11 +204,11 @@ extension OBDManager: CBCentralManagerDelegate {
 
 extension OBDManager: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-        guard error == nil, let services = peripheral.services, !services.isEmpty else { clearConnection(state: .failed); scheduleReconnect(); return }
+        guard isEnabled, error == nil, let services = peripheral.services, !services.isEmpty else { clearConnection(state: .failed); scheduleReconnect(); return }
         services.forEach { peripheral.discoverCharacteristics(nil, for: $0) }
     }
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
-        guard error == nil else { return }
+        guard isEnabled, error == nil else { return }
         for characteristic in service.characteristics ?? [] {
             if characteristic.properties.contains(.notify) || characteristic.properties.contains(.indicate) { readCharacteristic = characteristic; peripheral.setNotifyValue(true, for: characteristic) }
             if characteristic.properties.contains(.write) || characteristic.properties.contains(.writeWithoutResponse) { writeCharacteristic = characteristic }
@@ -189,7 +218,7 @@ extension OBDManager: CBPeripheralDelegate {
     }
     func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) { if let error { log("Notify setup failed: \(error.localizedDescription)") } }
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
-        guard error == nil, let data = characteristic.value, let text = String(data: data, encoding: .utf8) else { return }
+        guard isEnabled, error == nil, let data = characteristic.value, let text = String(data: data, encoding: .utf8) else { return }
         responseBuffer += text
         if responseBuffer.contains(">") { let response = responseBuffer; responseBuffer = ""; handleResponse(response) }
     }
