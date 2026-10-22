@@ -22,20 +22,29 @@ struct ContentView: View {
     var body: some View {
         TabView {
             NavigationStack {
-                VStack(spacing: 12) {
-                    vehicleRangeCard.padding(.horizontal)
-                    HStack {
-                        Picker("State", selection: $service.selectedState) { ForEach(AustralianState.allCases) { state in Text(state.rawValue).tag(state) } }.pickerStyle(.menu).tint(.mint).onChange(of: service.selectedState) { _, _ in service.refreshStations() }
-                        Spacer()
-                        Picker("Fuel", selection: $selectedFuel) { ForEach(FuelType.allCases) { Text($0.rawValue).tag($0) } }.pickerStyle(.menu).tint(.mint)
-                    }.padding(.horizontal)
-                    Picker("Search radius", selection: $selectedRadius) { ForEach(StationRadius.allCases) { radius in Text(radius.title).tag(radius) } }.pickerStyle(.segmented).padding(.horizontal)
-                    Text("\(stations.count) stations within \(selectedRadius.title)").font(.caption).foregroundStyle(.secondary)
-                    Toggle(isOn: $showMap) { Label(showMap ? "Map" : "Stations", systemImage: showMap ? "map" : "list.bullet") }.padding(.horizontal)
-                    Toggle("Price alerts", isOn: $alertsEnabled).tint(.mint).padding(.horizontal)
-                    if showMap {
-                        Map { ForEach(stations) { station in Annotation(station.name, coordinate: station.coordinate.location) { Button { selectedStation = station } label: { Text(station.prices[selectedFuel].map { String(format: "%.1f¢", $0) } ?? "—").font(.caption.bold()).padding(7).background(.mint, in: Circle()).foregroundStyle(.black) }.buttonStyle(.plain) } } }.mapStyle(.standard(elevation: .realistic)).clipShape(RoundedRectangle(cornerRadius: 18)).padding()
-                    } else { List(stations) { station in Button { selectedStation = station } label: { StationRow(station: station, fuel: selectedFuel) }.buttonStyle(.plain) }.listStyle(.plain) }
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        vehicleRangeCard.padding(.horizontal)
+                        HStack {
+                            Picker("State", selection: $service.selectedState) { ForEach(AustralianState.allCases) { state in Text(state.rawValue).tag(state) } }.pickerStyle(.menu).tint(.mint).onChange(of: service.selectedState) { _, _ in service.refreshStations() }
+                            Spacer()
+                            Picker("Fuel", selection: $selectedFuel) { ForEach(FuelType.allCases) { Text($0.rawValue).tag($0) } }.pickerStyle(.menu).tint(.mint)
+                        }.padding(.horizontal)
+                        Picker("Search radius", selection: $selectedRadius) { ForEach(StationRadius.allCases) { radius in Text(radius.title).tag(radius) } }.pickerStyle(.segmented).padding(.horizontal)
+                        Text("\(stations.count) stations within \(selectedRadius.title)").font(.caption).foregroundStyle(.secondary)
+                        Toggle(isOn: $showMap) { Label(showMap ? "Map" : "Stations", systemImage: showMap ? "map" : "list.bullet") }.padding(.horizontal)
+                        Toggle("Price alerts", isOn: $alertsEnabled).tint(.mint).padding(.horizontal)
+                        if showMap {
+                            Map { ForEach(stations) { station in Annotation(station.name, coordinate: station.coordinate.location) { Button { selectedStation = station } label: { Text(station.prices[selectedFuel].map { String(format: "%.1f¢", $0) } ?? "—").font(.caption.bold()).padding(7).background(.mint, in: Circle()).foregroundStyle(.black) }.buttonStyle(.plain) } } }.mapStyle(.standard(elevation: .realistic)).clipShape(RoundedRectangle(cornerRadius: 18)).padding()
+                        } else {
+                            LazyVStack(spacing: 0) {
+                                ForEach(stations) { station in
+                                    Button { selectedStation = station } label: { StationRow(station: station, fuel: selectedFuel) }.buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.vertical, 8)
                 }
                 .background(Color(uiColor: .systemBackground))
                 .navigationTitle("CoastFuel")
