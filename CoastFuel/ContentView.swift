@@ -74,7 +74,7 @@ struct ContentView: View {
     private var adapterRecommendation: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Don't have an OBD-II adapter? Get a compatible Bluetooth scanner to unlock live fuel levels and smart range alerts.").font(.caption).fixedSize(horizontal: false, vertical: true)
-            Link(destination: URL(string: "https://www.amazon.com.au/s?k=ELM327+bluetooth+4.0+OBD2&tag=daveytodd-22")!) { Label("Shop ELM327 Bluetooth adapters on Amazon AU", systemImage: "arrow.up.right.square").font(.caption.bold()) }.tint(.mint)
+            Link(destination: URL(string: "https://link.amazon/B048kUETy")!) { Label("Shop Veepeak OBDCheck BLE on Amazon AU", systemImage: "arrow.up.right.square").font(.caption.bold()) }.tint(.mint)
             Text("As an Amazon Associate, Dave may earn from qualifying purchases.").font(.caption2).foregroundStyle(.secondary)
         }.padding(10).frame(maxWidth: .infinity, alignment: .leading).background(Color(white: 0.13), in: RoundedRectangle(cornerRadius: 12))
     }
