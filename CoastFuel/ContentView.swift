@@ -6,40 +6,40 @@ struct ContentView: View {
     @StateObject private var service = FuelDataService()
     @StateObject private var locationManager = FuelLocationManager()
     @StateObject private var obdManager = OBDManager()
+    @AppStorage("CoastFuel.tankCapacityLitres") private var tankCapacityLitres = 51.0
+    @AppStorage("CoastFuel.averageConsumptionLitresPer100Km") private var averageConsumption = 7.0
     @State private var selectedFuel: FuelType = .unleaded91
     @State private var selectedRadius: StationRadius = .tenKm
     @State private var showMap = false
     @State private var alertsEnabled = false
     @State private var selectedStation: FuelStation?
-    private let fuelRangeAdvisor = FuelRangeAdvisor()
+    @State private var showVehicleSettings = false
 
     private var stations: [FuelStation] {
         service.stations.filter { $0.distanceKm <= selectedRadius.kilometers }.sorted { $0.distanceKm < $1.distanceKm }
     }
-    private var fuelRecommendation: FuelRangeAdvisor.Recommendation? {
-        fuelRangeAdvisor.recommendation(fuelLevelPercentage: obdManager.fuelLevelPercentage, stations: service.stations, fuel: selectedFuel)
+    private var rangeAdvisor: FuelRangeAdvisor {
+        FuelRangeAdvisor(tankCapacityLitres: tankCapacityLitres, averageConsumptionLitresPer100Km: averageConsumption)
     }
-    private var obdStatus: String {
-        guard obdManager.isConnected else { return "Disconnected" }
-        return obdManager.isVehicleRunning ? "Engine Running" : "Engine Off"
+    private var rangeRecommendation: FuelRangeAdvisor.Recommendation {
+        rangeAdvisor.recommendation(fuelLevelPercentage: obdManager.fuelLevelPercentage, stations: service.stations, fuel: selectedFuel)
     }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 12) {
-                obdCard
+                vehicleRangeCard.padding(.horizontal)
                 HStack {
                     Picker("State", selection: $service.selectedState) {
                         ForEach(AustralianState.allCases) { state in Text(state.rawValue).tag(state) }
-                    }.pickerStyle(.menu).tint(.mint)
-                        .onChange(of: service.selectedState) { _, _ in service.refreshStations() }
+                    }.pickerStyle(.menu).tint(.mint).onChange(of: service.selectedState) { _, _ in service.refreshStations() }
                     Spacer()
                     Picker("Fuel", selection: $selectedFuel) { ForEach(FuelType.allCases) { Text($0.rawValue).tag($0) } }.pickerStyle(.menu).tint(.mint)
                 }.padding(.horizontal)
                 Picker("Search radius", selection: $selectedRadius) {
                     ForEach(StationRadius.allCases) { radius in Text(radius.title).tag(radius) }
                 }.pickerStyle(.segmented).padding(.horizontal)
-                Text("\\(stations.count) stations within \\(selectedRadius.title)").font(.caption).foregroundStyle(.secondary)
+                Text("\(stations.count) stations within \(selectedRadius.title)").font(.caption).foregroundStyle(.secondary)
                 Toggle(isOn: $showMap) { Label(showMap ? "Map" : "Stations", systemImage: showMap ? "map" : "list.bullet") }.padding(.horizontal)
                 Toggle("Price alerts", isOn: $alertsEnabled).tint(.mint).padding(.horizontal)
                 if showMap {
@@ -51,9 +51,7 @@ struct ContentView: View {
                         }
                     }}.mapStyle(.standard(elevation: .realistic)).clipShape(RoundedRectangle(cornerRadius: 18)).padding()
                 } else {
-                    List(stations) { station in
-                        Button { selectedStation = station } label: { StationRow(station: station, fuel: selectedFuel) }.buttonStyle(.plain)
-                    }.listStyle(.plain)
+                    List(stations) { station in Button { selectedStation = station } label: { StationRow(station: station, fuel: selectedFuel) }.buttonStyle(.plain) }.listStyle(.plain)
                 }
             }
             .background(Color.black).navigationTitle("CoastFuel").task {
@@ -63,48 +61,66 @@ struct ContentView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { locationManager.requestCurrentLocation() } label: { Image(systemName: "location.fill") }
-                        .tint(.mint).accessibilityLabel("Refresh stations from current location")
+                    Button { locationManager.requestCurrentLocation() } label: { Image(systemName: "location.fill") }.tint(.mint).accessibilityLabel("Refresh stations from current location")
                 }
             }
         }
         .sheet(item: $selectedStation) { station in FuelStationDetailView(station: station) }
+        .sheet(isPresented: $showVehicleSettings) { vehicleSettings }
         .preferredColorScheme(.dark)
     }
 
-    private var obdCard: some View {
+    private var vehicleRangeCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label(obdStatus, systemImage: obdManager.isConnected ? (obdManager.isVehicleRunning ? "car.fill" : "car") : "bolt.slash.fill")
-                    .font(.headline).foregroundStyle(obdManager.isConnected ? .mint : .secondary)
+                Label("Vehicle fuel range", systemImage: "fuelpump.fill").font(.headline)
                 Spacer()
-                if obdManager.isConnected {
-                    Button("Disconnect") { obdManager.disconnect() }.tint(.orange)
-                } else {
-                    Button(obdManager.connectionState == .scanning ? "Scanning…" : "Connect") {
-                        obdManager.startScanning()
-                    }.tint(.mint)
-                    .disabled(obdManager.connectionState == .scanning || obdManager.connectionState == .connecting || obdManager.connectionState == .discovering || obdManager.connectionState == .initializing)
+                Circle().fill(obdManager.isVehicleRunning ? .green : (obdManager.isConnected ? .orange : .gray)).frame(width: 9, height: 9)
+                Text(obdManager.isVehicleRunning ? "Engine Running" : (obdManager.isConnected ? "Engine Off" : "Disconnected"))
+                    .font(.caption.bold()).foregroundStyle(.secondary)
+                Menu {
+                    if obdManager.isConnected { Button("Disconnect OBD-II", role: .destructive) { obdManager.disconnect() } }
+                    else {
+                        Button("Scan for OBD-II adapter") { obdManager.startScanning() }
+                        ForEach(obdManager.discoveredAdapters, id: \.identifier) { peripheral in
+                            Button(peripheral.name ?? "OBD-II adapter") { obdManager.connect(to: peripheral) }
+                        }
+                    }
+                    Button("Vehicle profile settings") { showVehicleSettings = true }
+                } label: { Image(systemName: "ellipsis.circle").font(.title3).foregroundStyle(.mint) }
+                .accessibilityLabel("OBD and vehicle settings")
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 24) {
+                VStack(alignment: .leading) {
+                    Text("Fuel level").font(.caption).foregroundStyle(.secondary)
+                    Text(obdManager.fuelLevelPercentage.map { String(format: "%.0f%%", $0) } ?? "—").font(.title2.bold())
+                }
+                VStack(alignment: .leading) {
+                    Text("Estimated range").font(.caption).foregroundStyle(.secondary)
+                    Text(rangeAdvisor.estimatedRangeKm(fuelLevelPercentage: obdManager.fuelLevelPercentage).map { String(format: "%.0f km", $0) } ?? "—").font(.title2.bold()).foregroundStyle(.mint)
                 }
             }
-            HStack {
-                metric(title: "Fuel", value: obdManager.fuelLevelPercentage.map { String(format: "%.0f%%", $0) } ?? "—")
-                Spacer()
-                metric(title: "Estimated range", value: fuelRecommendation.map { String(format: "%.0f km", $0.rangeKm) } ?? "—")
-                if obdManager.isConnected && obdManager.isVehicleRunning {
-                    Button { obdManager.requestFuelLevel() } label: { Image(systemName: "arrow.clockwise") }.tint(.mint).accessibilityLabel("Refresh fuel level")
-                }
-            }
-            Text(fuelRecommendation?.text ?? (obdManager.isConnected ? "Waiting for live fuel level…" : "Connect an OBD-II adapter for live fuel advice."))
-                .font(.subheadline).foregroundStyle(.secondary)
+            Text(rangeRecommendation.text).font(.subheadline).foregroundStyle(rangeRecommendation.isLowFuel ? .orange : .white).fixedSize(horizontal: false, vertical: true)
+            Text(String(format: "Vehicle profile: %.0f L tank · %.1f L/100 km", tankCapacityLitres, averageConsumption)).font(.caption2).foregroundStyle(.secondary)
+            if obdManager.isVehicleRunning { Button("Refresh fuel level") { obdManager.requestFuelLevel() }.font(.caption.bold()).tint(.mint) }
         }
-        .padding(14).background(Color(white: 0.09), in: RoundedRectangle(cornerRadius: 16)).padding(.horizontal)
-        .onChange(of: obdManager.isConnected) { _, connected in if connected { obdManager.requestFuelLevel() } }
-        .onChange(of: obdManager.isVehicleRunning) { _, running in if running { obdManager.requestFuelLevel() } }
+        .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(white: 0.09), in: RoundedRectangle(cornerRadius: 16))
     }
 
-    private func metric(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) { Text(title).font(.caption).foregroundStyle(.secondary); Text(value).font(.title3.bold()).foregroundStyle(.white) }
+    private var vehicleSettings: some View {
+        NavigationStack {
+            Form {
+                Section("Vehicle profile") {
+                    HStack { Text("Tank capacity"); Spacer(); TextField("Litres", value: $tankCapacityLitres, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing); Text("L") }
+                    HStack { Text("Average consumption"); Spacer(); TextField("L/100 km", value: $averageConsumption, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing); Text("L/100 km") }
+                }
+                Section { Text("These settings are saved on this device and used to estimate range for the connected car.").font(.footnote).foregroundStyle(.secondary) }
+            }
+            .navigationTitle("Vehicle profile")
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { showVehicleSettings = false }.tint(.mint) } }
+            .preferredColorScheme(.dark)
+        }
     }
 }
 
@@ -124,10 +140,8 @@ private final class FuelLocationManager: NSObject, ObservableObject, CLLocationM
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         if manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways { manager.requestLocation() }
     }
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let location = locations.last else { return }; onLocationUpdate?(location)
-    }
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) { print("Unable to obtain current location: \\(error.localizedDescription)") }
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) { if let location = locations.last { onLocationUpdate?(location) } }
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) { print("Unable to obtain current location: \(error.localizedDescription)") }
 }
 
 enum StationRadius: String, CaseIterable, Identifiable {
@@ -146,7 +160,7 @@ private struct StationRow: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text(station.name).font(.headline).foregroundStyle(.white)
                 Text(station.address).font(.caption).foregroundStyle(.secondary)
-                Text("\\(station.distanceKm, specifier: "%.1f") km · \\(station.amenities.joined(separator: " · "))").font(.caption2).foregroundStyle(.secondary)
+                Text("\(station.distanceKm, specifier: "%.1f") km · \(station.amenities.joined(separator: " · "))").font(.caption2).foregroundStyle(.secondary)
             }
             Spacer()
             Text(station.prices[fuel].map { String(format: "%.1f¢", $0) } ?? "—").font(.title3.bold()).foregroundStyle(.mint)
@@ -156,17 +170,17 @@ private struct StationRow: View {
 
 private struct FuelStationDetailView: View {
     let station: FuelStation
-    @Environment(\\.dismiss) private var dismiss
-    private var orderedPrices: [(fuel: FuelType, price: Double)] { FuelType.allCases.compactMap { fuel in station.prices[fuel].map { (fuel, $0) } } }
+    @Environment(\.dismiss) private var dismiss
+    private var orderedPrices: [(fuel: FuelType, price: Double)] { FuelType.allCases.compactMap { fuel in station.prices[fuel].map { (fuel, $0) } }
     var body: some View {
         NavigationStack {
             List {
                 Section(station.name) {
                     Text(station.address)
                     Text(String(format: "%.1f km away", station.distanceKm))
-                    ForEach(orderedPrices, id: \\.fuel) { entry in HStack { Text(entry.fuel.rawValue); Spacer(); Text(String(format: "%.1f¢/L", entry.price)).foregroundStyle(.mint) } }
+                    ForEach(orderedPrices, id: \.fuel) { entry in HStack { Text(entry.fuel.rawValue); Spacer(); Text(String(format: "%.1f¢/L", entry.price)).foregroundStyle(.mint) } }
                 }
-                Section("Amenities") { ForEach(station.amenities, id: \\.self) { Text($0) } }
+                Section("Amenities") { ForEach(station.amenities, id: \.self) { Text($0) } }
                 Section { Button("Open in Apple Maps") {
                     let item = MKMapItem(placemark: MKPlacemark(coordinate: station.coordinate.location)); item.name = station.name
                     item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving])
