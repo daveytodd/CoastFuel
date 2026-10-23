@@ -5,7 +5,13 @@ import UIKit
 struct CoastFuelApp: App {
     @UIApplicationDelegateAdaptor(CoastFuelAppDelegate.self) private var appDelegate
     var body: some Scene {
-        WindowGroup { ContentView().preferredColorScheme(.dark) }
+        WindowGroup {
+            ContentView()
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    TankPromotionCard()
+                }
+                .preferredColorScheme(.dark)
+        }
     }
 }
 
