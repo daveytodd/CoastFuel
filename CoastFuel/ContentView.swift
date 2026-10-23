@@ -130,7 +130,7 @@ private struct SettingsView: View {
                 Section("About the Developer") {
                     LabeledContent("Developer", value: "Dave Todd")
                     Text("Daveytodd Inc.").font(.caption).foregroundStyle(.secondary)
-                    Link(destination: URL(string: "https://x.com/daveytodd")!) { Label("X / Twitter · @daveytodd", systemImage: "at") }.tint(.mint)
+                    Link(destination: URL(string: "https://x.com/DavidTo22729509")!) { Label("X / Twitter · @DavidTo22729509", systemImage: "at") }.tint(.mint)
                     Link(destination: URL(string: "https://instagram.com/daveytodd_")!) { Label("Instagram · @daveytodd_", systemImage: "camera") }.tint(.mint)
                 }
             }
