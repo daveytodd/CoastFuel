@@ -36,50 +36,27 @@ struct ContentView: View {
                         Toggle("Price alerts", isOn: $alertsEnabled).tint(.mint).padding(.horizontal)
                         if showMap {
                             Map { ForEach(stations) { station in Annotation(station.name, coordinate: station.coordinate.location) { Button { selectedStation = station } label: { Text(station.prices[selectedFuel].map { String(format: "%.1f¢", $0) } ?? "—").font(.caption.bold()).padding(7).background(.mint, in: Circle()).foregroundStyle(.black) }.buttonStyle(.plain) } } }
-                                .mapStyle(.standard(elevation: .realistic))
-                                .frame(height: 300)
-                                .clipShape(RoundedRectangle(cornerRadius: 20))
-                                .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.primary.opacity(0.08), lineWidth: 1))
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 4)
+                                .mapStyle(.standard(elevation: .realistic)).frame(height: 300).clipShape(RoundedRectangle(cornerRadius: 20)).overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.primary.opacity(0.08), lineWidth: 1)).padding(.horizontal, 16).padding(.vertical, 4)
                         } else {
-                            LazyVStack(spacing: 0) {
-                                ForEach(stations) { station in
-                                    Button { selectedStation = station } label: { StationRow(station: station, fuel: selectedFuel) }.buttonStyle(.plain)
-                                }
-                            }
+                            LazyVStack(spacing: 0) { ForEach(stations) { station in Button { selectedStation = station } label: { StationRow(station: station, fuel: selectedFuel) }.buttonStyle(.plain) } }
                         }
-                    }
-                    .padding(.vertical, 12)
+                    }.padding(.vertical, 12)
                 }
-                .background(Color(uiColor: .systemBackground))
-                .navigationTitle("CoastFuel")
+                .background(Color(uiColor: .systemBackground)).navigationTitle("CoastFuel")
                 .onAppear { syncFuelTypeWithActiveVehicle() }
                 .onChange(of: profileStore.activeProfileID) { _, _ in syncFuelTypeWithActiveVehicle() }
                 .onChange(of: profileStore.activeProfile.preferredFuelType) { _, _ in syncFuelTypeWithActiveVehicle() }
                 .task { await service.load(); locationManager.onLocationUpdate = { location in service.setUserLocation(location) }; locationManager.requestCurrentLocation() }
                 .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { locationManager.requestCurrentLocation() } label: { Image(systemName: "location.fill") }.tint(.mint).accessibilityLabel("Refresh stations from current location") } }
-            }
-            .tabItem { Label("Fuel Prices", systemImage: "fuelpump.fill") }
-            SettingsView(obdManager: obdManager, profileStore: profileStore)
-                .tabItem { Label("Settings", systemImage: "gearshape.fill") }
+            }.tabItem { Label("Fuel Prices", systemImage: "fuelpump.fill") }
+            SettingsView(obdManager: obdManager, profileStore: profileStore).tabItem { Label("Settings", systemImage: "gearshape.fill") }
         }
-        .tint(.mint)
-        .preferredColorScheme(appScheme)
+        .tint(.mint).preferredColorScheme(appScheme)
         .sheet(item: $selectedStation) { station in FuelStationDetailView(station: station) }
         .sheet(isPresented: $showVehicleSettings) { VehicleProfilesView(store: profileStore) }
     }
-
-    private func selectVehicle(_ id: UUID) {
-        profileStore.select(id)
-        syncFuelTypeWithActiveVehicle()
-    }
-
-    private func syncFuelTypeWithActiveVehicle() {
-        let profile = profileStore.activeProfile
-        selectedFuel = FuelType(rawValue: profile.preferredFuelType) ?? profile.fuelType
-    }
-
+    private func selectVehicle(_ id: UUID) { profileStore.select(id); syncFuelTypeWithActiveVehicle() }
+    private func syncFuelTypeWithActiveVehicle() { let profile = profileStore.activeProfile; selectedFuel = FuelType(rawValue: profile.preferredFuelType) ?? profile.fuelType }
     private var vehicleRangeCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -108,7 +85,6 @@ struct ContentView: View {
             if !obdManager.isConnected { adapterRecommendation }
         }.padding(14).frame(maxWidth: .infinity, alignment: .leading).background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
     }
-
     private var adapterRecommendation: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Don't have an OBD-II adapter? Get a compatible Bluetooth scanner to unlock live fuel levels and smart range alerts.").font(.caption).fixedSize(horizontal: false, vertical: true)
@@ -127,10 +103,8 @@ private struct SettingsView: View {
         NavigationStack {
             List {
                 Section {
-                    ShareLink(item: "Check out CoastFuel — find nearby fuel prices and plan your next stop.") {
-                        Label("Share CoastFuel", systemImage: "square.and.arrow.up.fill").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 10)
-                    }.tint(.mint).listRowBackground(Color(uiColor: .secondarySystemBackground))
-                }
+                    ShareLink(item: "Check out CoastFuel — find nearby fuel prices and plan your next stop.") { Label("Share CoastFuel", systemImage: "square.and.arrow.up.fill").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 10) }
+                }.tint(.mint).listRowBackground(Color(uiColor: .secondarySystemBackground))
                 Section("App Icon") {
                     HStack { Label("Default", systemImage: "app.fill"); Spacer(); Text("Current").font(.caption).foregroundStyle(.secondary); Image(systemName: "checkmark.circle.fill").foregroundStyle(.mint) }
                     Text("Alternate app icons will be available in a future update.").font(.caption).foregroundStyle(.secondary)
@@ -146,21 +120,21 @@ private struct SettingsView: View {
                     Text("As an Amazon Associate, Dave may earn from qualifying purchases.").font(.caption2).foregroundStyle(.secondary)
                 }
                 Section("Appearance") {
-                    Picker("Theme", selection: $appTheme) {
-                        Text("Automatic (Day/Night)").tag("automatic")
-                        Text("Pure OLED Black").tag("dark")
-                        Text("Light").tag("light")
-                    }
+                    Picker("Theme", selection: $appTheme) { Text("Automatic (Day/Night)").tag("automatic"); Text("Pure OLED Black").tag("dark"); Text("Light").tag("light") }
                     Text(appTheme == "dark" ? "Pure OLED Black is active." : (appTheme == "light" ? "Light appearance is active." : "Follows your iOS appearance automatically.")).font(.caption).foregroundStyle(.secondary)
                 }
                 Section("About") {
                     LabeledContent("CoastFuel", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")
                     Text("Made with care by Daveytodd Inc.").font(.caption).foregroundStyle(.secondary)
                 }
+                Section("About the Developer") {
+                    LabeledContent("Developer", value: "Dave Todd")
+                    Text("Daveytodd Inc.").font(.caption).foregroundStyle(.secondary)
+                    Link(destination: URL(string: "https://x.com/daveytodd")!) { Label("X / Twitter · @daveytodd", systemImage: "at") }.tint(.mint)
+                    Link(destination: URL(string: "https://instagram.com/daveytodd_")!) { Label("Instagram · @daveytodd_", systemImage: "camera") }.tint(.mint)
+                }
             }
-            .scrollContentBackground(.hidden)
-            .background(Color(uiColor: .systemBackground))
-            .navigationTitle("Settings")
+            .scrollContentBackground(.hidden).background(Color(uiColor: .systemBackground)).navigationTitle("Settings")
             .sheet(isPresented: $showVehicleSettings) { VehicleProfilesView(store: profileStore) }
         }
     }
@@ -183,8 +157,7 @@ private struct VehicleProfilesView: View {
                     .onDelete { offsets in offsets.map { store.profiles[$0].id }.forEach { store.delete($0) } }
                     Button { isCreating = true } label: { Label("Add vehicle profile", systemImage: "plus") }
                 }
-            }
-            .scrollContentBackground(.hidden).background(Color(uiColor: .systemBackground))
+            }.scrollContentBackground(.hidden).background(Color(uiColor: .systemBackground))
             .navigationTitle("Vehicle profiles").toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
             .sheet(isPresented: $isCreating) { VehicleProfileEditor(profile: nil, onSave: store.add) }
             .sheet(item: $editingProfile) { profile in VehicleProfileEditor(profile: profile, onSave: store.update) }
@@ -206,15 +179,11 @@ private struct VehicleProfileEditor: View {
     var body: some View {
         NavigationStack {
             Form { Section("Vehicle details") {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Vehicle name").font(.caption).foregroundStyle(.secondary)
-                    TextField("e.g. Dave’s Mazda 3", text: $name).textInputAutocapitalization(.words).autocorrectionDisabled().submitLabel(.done).accessibilityLabel("Vehicle nickname")
-                }.padding(.vertical, 4)
+                VStack(alignment: .leading, spacing: 6) { Text("Vehicle name").font(.caption).foregroundStyle(.secondary); TextField("e.g. Dave’s Mazda 3", text: $name).textInputAutocapitalization(.words).autocorrectionDisabled().submitLabel(.done).accessibilityLabel("Vehicle nickname") }.padding(.vertical, 4)
                 Picker("Fuel type", selection: $fuelType) { ForEach(FuelType.allCases) { fuel in Text(fuel.rawValue).tag(fuel) } }
                 HStack { Text("Tank capacity"); Spacer(); TextField("Litres", value: $tankCapacity, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing); Text("L") }
                 HStack { Text("Fuel economy"); Spacer(); TextField("L/100 km", value: $consumption, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing); Text("L/100 km") }
-            } }.scrollContentBackground(.hidden).background(Color(uiColor: .systemBackground))
-            .navigationTitle(existing == nil ? "Add Vehicle" : "Edit Vehicle")
+            } }.scrollContentBackground(.hidden).background(Color(uiColor: .systemBackground)).navigationTitle(existing == nil ? "Add Vehicle" : "Edit Vehicle")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("Save") {
                 let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
                 let profile = VehicleProfile(id: existing?.id ?? UUID(), name: trimmedName, fuelType: fuelType, tankCapacityLitres: tankCapacity, averageConsumptionLitresPer100Km: consumption, obdAdapterUUID: existing?.obdAdapterUUID)
@@ -253,30 +222,17 @@ private struct StationRow: View {
 private struct FuelStationDetailView: View {
     let station: FuelStation
     @Environment(\.dismiss) private var dismiss
-    private var orderedPrices: [(fuel: FuelType, price: Double)] {
-        FuelType.allCases.compactMap { fuel in station.prices[fuel].map { (fuel, $0) } }
-    }
+    private var orderedPrices: [(fuel: FuelType, price: Double)] { FuelType.allCases.compactMap { fuel in station.prices[fuel].map { (fuel, $0) } } }
     var body: some View {
         NavigationStack {
             List {
                 Section(station.name) {
-                    Text(station.address)
-                    Text(String(format: "%.1f km away", station.distanceKm))
-                    ForEach(orderedPrices, id: \.fuel) { entry in
-                        HStack { Text(entry.fuel.rawValue); Spacer(); Text(String(format: "%.1f¢/L", entry.price)).foregroundStyle(.mint) }
-                    }
+                    Text(station.address); Text(String(format: "%.1f km away", station.distanceKm))
+                    ForEach(orderedPrices, id: \.fuel) { entry in HStack { Text(entry.fuel.rawValue); Spacer(); Text(String(format: "%.1f¢/L", entry.price)).foregroundStyle(.mint) } }
                 }
                 Section("Amenities") { ForEach(station.amenities, id: \.self) { Text($0) } }
-                Section {
-                    Button("Open in Apple Maps") {
-                        let item = MKMapItem(placemark: MKPlacemark(coordinate: station.coordinate.location))
-                        item.name = station.name
-                        item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving])
-                    }
-                }
-            }
-            .navigationTitle("Station details")
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() }.tint(.mint) } }
+                Section { Button("Open in Apple Maps") { let item = MKMapItem(placemark: MKPlacemark(coordinate: station.coordinate.location)); item.name = station.name; item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving]) } }
+            }.navigationTitle("Station details").toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() }.tint(.mint) } }
         }
     }
 }
